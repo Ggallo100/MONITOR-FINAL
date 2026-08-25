@@ -1,0 +1,17 @@
+{
+  "name": "Monitor NYSE · Portafolio",
+  "short_name": "Monitor NYSE",
+  "description": "Monitor de portafolio NYSE/NASDAQ en tiempo real con RSI, metas y stop-loss.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1017",
+  "theme_color": "#0b1017",
+  "lang": "es",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
