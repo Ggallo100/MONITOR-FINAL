@@ -101,6 +101,7 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
 <section id="que-es">
   <h2><span class="n">01</span>Qué es la herramienta</h2>
   <p>MarketSurge Web es una página que reproduce la pantalla de análisis de MarketSurge (Investor's Business Daily) con datos gratuitos. Se abre en cualquier navegador, no requiere instalar programas y guarda tus listas, notas y alertas en el propio navegador.</p>
+  <div class="callout"><p><b>Si al abrirla ves «No se pudo cargar»:</b> los proxies públicos de Yahoo se saturan con frecuencia. Ve a Ajustes ⚙, cambia la «Fuente de precios» a <b>Twelve Data</b> y pega una clave gratuita. Está explicado en el <a href="#ajustes">apartado 11</a>.</p></div>
   <p>Forma parte del mismo sitio que el Monitor de Portafolio. Son dos archivos:</p>
   <ul>
     <li><code>index.html</code>, el monitor de posiciones con RSI, metas y stop-loss.</li>
@@ -311,6 +312,7 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
   <p>El botón ⚙ abre los ajustes. Se guardan al pulsar <b>Guardar</b> y recargan el símbolo actual.</p>
   <div class="tblwrap"><table>
     <tr><th>Ajuste</th><th>Para qué sirve</th></tr>
+    <tr><td>Fuente de precios</td><td><b>Yahoo Finance:</b> gratis y sin registro, pero necesita proxy y a veces se satura. <b>Twelve Data:</b> el navegador la llama directamente, sin intermediarios; necesita una clave gratuita y es la opción estable cuando los proxies fallan.</td></tr>
     <tr><td>Actualización automática</td><td>Segundos entre refrescos con el mercado abierto (15 por defecto, mínimo 5). Con el mercado cerrado refresca cada 5 minutos.</td></tr>
     <tr><td>Índice de referencia</td><td>Índice contra el que se calcula la línea RS y el RS Rating: S&amp;P 500, Nasdaq Composite, QQQ o SPY.</td></tr>
     <tr><td>Clave de Finnhub</td><td>Opcional y gratuita. Añade fechas de resultados confirmadas, EPS Due exacto, pares del grupo industrial, estimaciones de EPS de analistas, recomendaciones, IPO y teléfono.</td></tr>
@@ -318,6 +320,20 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
     <tr><td>Notificaciones</td><td>Pide permiso al navegador para avisar de alertas con notificación del sistema.</td></tr>
     <tr><td>Pre/post-mercado</td><td>Incluye la cotización fuera de horario en el precio en vivo.</td></tr>
   </table></div>
+  <h3>Cambiar a Twelve Data cuando los proxies fallen</h3>
+  <p>Es la solución rápida si ves «No se pudo cargar». No usa intermediarios, así que no depende de servicios públicos saturados.</p>
+  <ol class="steps">
+    <li>Entra en <a href="https://twelvedata.com/pricing" target="_blank" rel="noopener">twelvedata.com</a> y crea una cuenta gratuita. Copia la API key del panel.</li>
+    <li>En MarketSurge Web abre ⚙, elige <b>Twelve Data</b> en «Fuente de precios», pega la clave y guarda.</li>
+    <li>El gráfico, el precio, el volumen, la línea RS y los ratings técnicos funcionan igual.</li>
+  </ol>
+  <p>Qué cambia con Twelve Data:</p>
+  <ul>
+    <li><b>Fundamentales:</b> EPS, ventas, P/E y ROE se siguen leyendo de Yahoo. Si los proxies están caídos, esa parte queda en N/A y el pie de la pantalla lo avisa en rojo.</li>
+    <li><b>Índice de referencia:</b> el plan gratuito no sirve índices, así que la línea RS usa SPY en lugar del S&amp;P 500 y QQQ en lugar del Nasdaq. El cálculo es equivalente.</li>
+    <li><b>Ritmo:</b> 8 peticiones por minuto, así que la actualización automática baja a 30 segundos como mínimo y el screen de la lista va lento (unos 8 segundos por símbolo).</li>
+  </ul>
+
   <h3>Obtener la clave de Finnhub (5 minutos)</h3>
   <ol class="steps">
     <li>Entra en <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io/register</a> y crea una cuenta gratuita.</li>
@@ -357,7 +373,9 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
   <h2><span class="n">13</span>Problemas frecuentes</h2>
   <div class="tblwrap"><table>
     <tr><th>Síntoma</th><th>Causa y solución</th></tr>
-    <tr><td>«No se pudo cargar» y punto rojo</td><td>Ningún proxy responde. Abre ⚙ → <b>Probar proxies</b>. Si todos fallan, espera un minuto (los públicos tienen cuotas) o añade un proxy propio. Comprueba también que el símbolo existe en Yahoo.</td></tr>
+    <tr><td>«No se pudo cargar» y punto rojo</td><td>Ningún proxy de Yahoo responde. Abre ⚙ → <b>Probar proxies</b>: los prueba todos a la vez y dice cuál funciona y en cuántos milisegundos. Si ninguno responde (es habitual: corsproxy.io pide cuenta y devuelve 401, y los otros se saturan), cambia la <b>Fuente de precios</b> a Twelve Data, o despliega tu propio proxy con el código de este manual.</td></tr>
+    <tr><td>«signal is aborted without reason»</td><td>Es un tiempo de espera agotado: el proxy aceptó la conexión y nunca contestó. Mismo remedio que la fila anterior.</td></tr>
+    <tr><td>Todo el panel izquierdo en N/A pero el gráfico se ve</td><td>Los precios llegan (por Twelve Data o por un proxy) pero los fundamentales de Yahoo no. El pie de la pantalla lo indica. Prueba los proxies; con uno funcionando, la tabla de EPS y ventas vuelve.</td></tr>
     <tr><td>Precio distinto al de tu bróker</td><td>Yahoo entrega Nasdaq casi al instante y otros mercados con hasta 15 minutos de retraso. Para decisiones de segundos usa el bróker; esta pantalla es para análisis.</td></tr>
     <tr><td>Fechas con asterisco</td><td>Son estimadas. Pega una clave de Finnhub en Ajustes.</td></tr>
     <tr><td>Muchos N/A en el panel</td><td>Yahoo no publica esa partida para ese valor (habitual en ETF, ADR e índices) o son datos que no existen en fuentes gratuitas (fondos, flotante).</td></tr>
