@@ -418,7 +418,15 @@ canvas#chart{display:block;width:100%;height:100%;cursor:crosshair;touch-action:
       <input type="text" id="setFinnhub" placeholder="pega aquí tu API key" autocomplete="off" spellcheck="false">
       <div class="help">Añade: descripción, sede, teléfono, web, fecha de IPO real, fechas de resultados (marcadores EPS exactos y «EPS Due»), pares del grupo industrial y estimaciones de EPS de próximos trimestres. Regístrate gratis en finnhub.io.</div>
 
-      <label>Proxies CORS para Yahoo Finance</label>
+      <label for="setOwnProxy">Tu propio proxy de Cloudflare (recomendado)</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="setOwnProxy" placeholder="https://yahoo-proxy.tu-usuario.workers.dev" autocomplete="off" spellcheck="false" style="flex:1">
+        <button class="tb" id="btnTestOwn">Probar</button>
+      </div>
+      <div class="help">Pega la dirección que te dio Cloudflare al desplegar el Worker; el resto lo completa la app. Es gratis, no tiene cuota compartida y devuelve los fundamentales que los proxies públicos no alcanzan. El código y los pasos están en la carpeta <b>cloudflare-worker</b> del repositorio y en el <a href="./manual.html#ajustes" target="_blank" rel="noopener">manual</a>.</div>
+      <div id="ownTest" class="help"></div>
+
+      <label>Proxies públicos de reserva</label>
       <div class="help" style="margin-bottom:6px">El navegador no puede llamar a Yahoo directamente. Se prueba cada proxy en orden y se recuerda el que responde. Si van lentos, despliega el tuyo (un Cloudflare Worker de 10 líneas) y ponlo el primero.</div>
       <div id="proxyList"></div>
       <div class="row"><button class="tb" id="btnAddProxy">+ Añadir proxy</button> <button class="tb" id="btnResetProxy">Restablecer</button> <button class="tb primary" id="btnTestProxy">Probar proxies</button></div>
@@ -517,7 +525,7 @@ const LS = {
   set(k, v){ try{ localStorage.setItem('ms.'+k, JSON.stringify(v)); }catch(e){} }
 };
 const S = {
-  settings: Object.assign({provider:'yahoo', refresh:15, bench:'^GSPC', finnhub:'', tdKey:'', proxies:[...DEFAULT_PROXIES], notify:false, prePost:false}, LS.get('settings', {})),
+  settings: Object.assign({provider:'yahoo', refresh:15, bench:'^GSPC', finnhub:'', tdKey:'', ownProxy:'', proxies:[...DEFAULT_PROXIES], notify:false, prePost:false}, LS.get('settings', {})),
   lists: LS.get('lists', {'Mi lista': ['NVDA','ASML','AMD','AVGO','TSM','MU','APP','META','BABA','GLD']}),
   curList: LS.get('curList', 'Mi lista'),
   notes: LS.get('notes', {}),
@@ -554,6 +562,22 @@ async function fetchJson(url, ms=15000, opts={}){
     throw new Error(e.name === 'AbortError' ? 'conexión cancelada' : (e.message === 'Failed to fetch' ? 'no respondió (red o CORS)' : e.message));
   } finally { clearTimeout(t); }
 }
+/* Acepta la dirección del Worker tal como la copia Cloudflare
+   (https://mi-proxy.usuario.workers.dev) y le añade lo que falta. */
+function normalizeProxy(u){
+  u = String(u || '').trim();
+  if(!u) return '';
+  if(!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  if(u.includes('{url}') || /[?&](url|quest)=$/.test(u)) return u;
+  return u.replace(/\/+$/, '') + '/?url=';
+}
+/* Tu propio proxy va siempre primero: es el más rápido y no tiene cuotas. */
+function activeProxies(){
+  const own = normalizeProxy(S.settings.ownProxy);
+  const list = own ? [own] : [];
+  for(const p of S.settings.proxies){ const q = String(p || '').trim(); if(q && !list.includes(q)) list.push(q); }
+  return list;
+}
 function proxyUrl(proxy, target){ return proxy.includes('{url}') ? proxy.replace('{url}', encodeURIComponent(target)) : proxy + encodeURIComponent(target); }
 /* Una petición a Yahoo a través de un proxy concreto. */
 async function viaProxy(proxy, target, ms){
@@ -567,12 +591,14 @@ async function viaProxy(proxy, target, ms){
    primero que responda. El ganador se recuerda y se usa solo él la próxima vez. */
 async function yahooFetch(path){
   const target = 'https://query1.finance.yahoo.com' + path;
-  if(net.lastProxy){
-    try{ return await viaProxy(net.lastProxy, target, 15000); }
-    catch(e){ net.status.set(net.lastProxy, false); net.lastProxy = null; }
+  const all = activeProxies();
+  const first = net.lastProxy || all[0];
+  if(first){
+    try{ return await viaProxy(first, target, 15000); }
+    catch(e){ net.status.set(first, false); if(net.lastProxy === first) net.lastProxy = null; }
   }
-  const list = S.settings.proxies.filter(Boolean);
-  if(!list.length) throw new Error('no hay ningún proxy configurado en Ajustes');
+  const list = all.filter(p => p !== first);
+  if(!list.length) throw new Error(first ? 'el proxy no respondió' : 'no hay ningún proxy configurado en Ajustes');
   const errs = [];
   return new Promise((resolve, reject) => {
     let pending = list.length, done = false;
@@ -1520,7 +1546,7 @@ async function rankList(outEl, filters){
 /* ---- ajustes ------------------------------------------------------------- */
 function openSettings(){
   const s = S.settings;
-  $('#setProvider').value = s.provider; $('#setTdKey').value = s.tdKey || '';
+  $('#setProvider').value = s.provider; $('#setTdKey').value = s.tdKey || ''; $('#setOwnProxy').value = s.ownProxy || ''; $('#ownTest').textContent = '';
   $('#setRefresh').value = s.refresh; $('#setBench').value = s.bench; $('#setFinnhub').value = s.finnhub; $('#setNotify').checked = !!s.notify; $('#setPrePost').checked = !!s.prePost;
   renderProxyList(s.proxies); $('#proxyTest').textContent = ''; onProviderChange(); $('#settings').classList.add('open');
 }
@@ -1535,7 +1561,7 @@ function renderProxyList(list){ $('#proxyList').innerHTML = list.map((p, i) => `
 function readProxyList(){ return $$('#proxyList input').map(i => i.value.trim()).filter(Boolean); }
 async function saveSettings(){
   const s = S.settings;
-  s.provider = $('#setProvider').value; s.tdKey = $('#setTdKey').value.trim();
+  s.provider = $('#setProvider').value; s.tdKey = $('#setTdKey').value.trim(); s.ownProxy = $('#setOwnProxy').value.trim();
   if(s.provider === 'twelvedata' && !s.tdKey){ toast('Pega la clave de Twelve Data o vuelve a elegir Yahoo Finance', 'err', 5000); return; }
   s.refresh = clamp(+$('#setRefresh').value || 15, 5, 600); s.bench = $('#setBench').value; s.finnhub = $('#setFinnhub').value.trim(); s.notify = $('#setNotify').checked; s.prePost = $('#setPrePost').checked;
   s.proxies = readProxyList(); if(!s.proxies.length) s.proxies = [...DEFAULT_PROXIES];
@@ -1621,7 +1647,7 @@ function init(){
   $('#btnResetProxy').addEventListener('click', () => renderProxyList([...DEFAULT_PROXIES]));
   $('#proxyList').addEventListener('click', e => { const b = e.target.closest('[data-rmp]'); if(b){ const l = readProxyList(); l.splice(+b.dataset.rmp, 1); renderProxyList(l); } });
   $('#btnTestProxy').addEventListener('click', async () => {
-    const list = readProxyList(); const el = $('#proxyTest');
+    const own = normalizeProxy($('#setOwnProxy').value); const list = (own ? [own] : []).concat(readProxyList().filter(p => p !== own)); const el = $('#proxyTest');
     if(!list.length){ el.textContent = 'No hay proxies que probar.'; return; }
     el.textContent = 'Probando ' + list.length + ' proxies a la vez…';
     const target = 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&range=1d';
@@ -1640,6 +1666,28 @@ function init(){
     if(ok.length){ net.lastProxy = ok[0].p; }
   });
   $('#setProvider').addEventListener('change', onProviderChange);
+  $('#btnTestOwn').addEventListener('click', async () => {
+    const el = $('#ownTest'); const raw = $('#setOwnProxy').value.trim();
+    if(!raw){ el.innerHTML = '<span style="color:#b33">Pega antes la dirección de tu Worker.</span>'; return; }
+    const px = normalizeProxy(raw);
+    el.textContent = 'Probando ' + host(px) + '…';
+    const t0 = Date.now();
+    try{
+      // el gráfico confirma que llega a Yahoo; los fundamentales, que la ruta que faltaba también pasa
+      await viaProxy(px, 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&range=1d', 25000);
+      const ms = Date.now() - t0;
+      let fund = '';
+      try{
+        const p2 = Math.floor(Date.now()/1000);
+        await viaProxy(px, `https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/AAPL?symbol=AAPL&type=quarterlyDilutedEPS&period1=${p2-86400*400}&period2=${p2}`, 25000);
+        fund = '<div style="color:var(--green)">✅ Fundamentales (EPS y ventas): también pasan.</div>';
+      }catch(e){ fund = '<div style="color:#b33">⚠ El gráfico funciona, pero los fundamentales no: ' + esc(e.message) + '. Revisa que copiaste el worker.js completo.</div>'; }
+      el.innerHTML = `<div style="color:var(--green)">✅ Tu proxy responde en ${ms} ms.</div>` + fund + '<div>Pulsa Guardar para empezar a usarlo.</div>';
+      S.settings.ownProxy = raw; net.lastProxy = px;
+    }catch(e){
+      el.innerHTML = '<span style="color:#b33">❌ No responde: ' + esc(e.message) + '.</span> Comprueba que la dirección es la que imprimió Cloudflare y que el Worker está desplegado (ábrela en una pestaña: debe responder <code>{"ok":true}</code>).';
+    }
+  });
   $('#btnIdeas').addEventListener('click', () => { location.href = './index.html'; });
   $('#btnPrint').addEventListener('click', () => window.print());
   $('#btnFull').addEventListener('click', () => { if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); });

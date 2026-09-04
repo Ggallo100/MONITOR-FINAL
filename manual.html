@@ -101,7 +101,7 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
 <section id="que-es">
   <h2><span class="n">01</span>Qué es la herramienta</h2>
   <p>MarketSurge Web es una página que reproduce la pantalla de análisis de MarketSurge (Investor's Business Daily) con datos gratuitos. Se abre en cualquier navegador, no requiere instalar programas y guarda tus listas, notas y alertas en el propio navegador.</p>
-  <div class="callout"><p><b>Si al abrirla ves «No se pudo cargar»:</b> los proxies públicos de Yahoo se saturan con frecuencia. Ve a Ajustes ⚙, cambia la «Fuente de precios» a <b>Twelve Data</b> y pega una clave gratuita. Está explicado en el <a href="#ajustes">apartado 11</a>.</p></div>
+  <div class="callout"><p><b>Si al abrirla ves «No se pudo cargar»:</b> los proxies públicos de Yahoo se saturan con frecuencia. Tienes dos salidas, ambas en el <a href="#ajustes">apartado 11</a>: la rápida es cambiar la «Fuente de precios» a <b>Twelve Data</b> (clave gratuita, cinco minutos, pero deja los fundamentales en N/A); la definitiva es desplegar <b>tu propio proxy en Cloudflare</b>, que recupera también los fundamentales y ya está programado en el repositorio.</p></div>
   <p>Forma parte del mismo sitio que el Monitor de Portafolio. Son dos archivos:</p>
   <ul>
     <li><code>index.html</code>, el monitor de posiciones con RSI, metas y stop-loss.</li>
@@ -316,7 +316,8 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
     <tr><td>Actualización automática</td><td>Segundos entre refrescos con el mercado abierto (15 por defecto, mínimo 5). Con el mercado cerrado refresca cada 5 minutos.</td></tr>
     <tr><td>Índice de referencia</td><td>Índice contra el que se calcula la línea RS y el RS Rating: S&amp;P 500, Nasdaq Composite, QQQ o SPY.</td></tr>
     <tr><td>Clave de Finnhub</td><td>Opcional y gratuita. Añade fechas de resultados confirmadas, EPS Due exacto, pares del grupo industrial, estimaciones de EPS de analistas, recomendaciones, IPO y teléfono.</td></tr>
-    <tr><td>Proxies CORS</td><td>Intermediarios para llamar a Yahoo Finance desde el navegador. Se prueban en orden y se recuerda el que responde. <b>Probar proxies</b> mide cada uno.</td></tr>
+    <tr><td>Tu propio proxy de Cloudflare</td><td>La dirección de tu Worker. Se usa siempre primero, no tiene cuota compartida y es lo único que recupera los fundamentales cuando los públicos fallan. El botón <b>Probar</b> comprueba gráfico y fundamentales por separado.</td></tr>
+    <tr><td>Proxies públicos de reserva</td><td>Intermediarios gratuitos para Yahoo. Se lanzan todos a la vez y gana el primero que responde. <b>Probar proxies</b> los mide y deja seleccionado el más rápido.</td></tr>
     <tr><td>Notificaciones</td><td>Pide permiso al navegador para avisar de alertas con notificación del sistema.</td></tr>
     <tr><td>Pre/post-mercado</td><td>Incluye la cotización fuera de horario en el precio en vivo.</td></tr>
   </table></div>
@@ -340,8 +341,20 @@ footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-si
     <li>En el panel aparece tu <b>API key</b>. Cópiala.</li>
     <li>En MarketSurge Web abre ⚙, pégala en «Clave de Finnhub» y guarda. Las fechas dejan de llevar asterisco.</li>
   </ol>
-  <h3>Proxy propio (opcional, si los públicos van lentos)</h3>
-  <p>Un Cloudflare Worker gratuito de diez líneas hace de intermediario solo para Yahoo. Crea un Worker en dash.cloudflare.com, pega este código y pon su dirección como primer proxy con el formato <code>https://tu-worker.workers.dev/?url=</code>.</p>
+  <h3>Proxy propio en Cloudflare — la solución definitiva</h3>
+  <p>Es lo único que recupera <b>todo</b>: gráfico, precio y también los fundamentales (EPS, ventas, P/E, ROE) que los proxies públicos no alcanzan. Es gratis, no pide tarjeta y son unos tres minutos. El código ya está escrito en la carpeta <code>cloudflare-worker</code> del repositorio.</p>
+  <ol class="steps">
+    <li>Crea una cuenta gratuita en <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com</a> y confirma el correo.</li>
+    <li>En el menú lateral entra en <b>Compute (Workers)</b> → <b>Create</b> → <b>Start with Hello World!</b> → <b>Get started</b>.</li>
+    <li>Ponle el nombre <code>yahoo-proxy</code> y pulsa <b>Deploy</b>.</li>
+    <li>Pulsa <b>Edit code</b>, borra todo lo que haya en el editor y pega el contenido completo del archivo <code>cloudflare-worker/worker.js</code> del repositorio. Pulsa <b>Deploy</b> otra vez.</li>
+    <li>Copia la dirección que aparece arriba, del tipo <code>https://yahoo-proxy.tu-usuario.workers.dev</code>, y ábrela en una pestaña: debe responder <code>{"ok":true,...}</code>.</li>
+    <li>En MarketSurge Web abre ⚙, pega esa dirección en <b>«Tu propio proxy de Cloudflare»</b>, pulsa <b>Probar</b> y después <b>Guardar</b>.</li>
+  </ol>
+  <p>El botón <b>Probar</b> hace dos comprobaciones: que el gráfico llega y que los fundamentales también. Si la segunda falla, es que el código quedó pegado a medias; vuelve al paso 4.</p>
+  <div class="callout ok"><p><b>Por qué es seguro:</b> el Worker solo deja pasar cinco direcciones públicas de Yahoo. Cualquier otra petición la rechaza, así que nadie puede usarlo para navegar a tu costa. Además guarda en caché los estados financieros seis horas, con lo que apenas consume cuota. El plan gratuito da 100.000 peticiones al día; una sesión de análisis gasta unos cientos.</p></div>
+  <p>Si prefieres la línea de comandos, en la misma carpeta hay un <code>wrangler.toml</code>: <code>npm install -g wrangler</code>, <code>wrangler login</code> y <code>wrangler deploy</code>.</p>
+  <p>Este era el código antiguo de diez líneas, que sigue valiendo pero no cachea ni filtra rutas:</p>
   <pre><code>export default {
   async fetch(req) {
     const u = new URL(req.url).searchParams.get('url');
