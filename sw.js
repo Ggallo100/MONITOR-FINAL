@@ -1,8 +1,8 @@
 /* Service worker mínimo: permite instalar la app y que abra sin conexión.
    Estrategia: la red manda, la caché es el plan B. Así siempre ves la última
    versión publicada, pero la app arranca aunque estés sin cobertura. */
-const CACHE = 'monitor-nyse-v1';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'monitor-nyse-v2';
+const SHELL = ['./', './index.html', './marketsurge.html', './manifest.webmanifest', './icon192.png', './icon512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
