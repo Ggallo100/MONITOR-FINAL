@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="./icon192.png">
+<title>Manual MarketSurge Web</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#ffffff; --ground:#f3f4f7; --surface:#ffffff; --ink:#111318; --ink2:#3b3f4a; --muted:#6b7080; --line:#d9dce4;
+  --navy:#1f2a44; --navy-ink:#ffffff; --green:#1f9d44; --green-soft:#e3f5e8; --blue:#1e40c8; --magenta:#d43aa6; --amber:#b9770e; --amber-soft:#fdf1dc; --red:#c62828;
+  --code-bg:#eef0f5;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif; --body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif; --mono:"IBM Plex Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --paper:#0f1420; --ground:#0f1420; --surface:#182034; --ink:#e6e8ee; --ink2:#c3c8d4; --muted:#98a0b3; --line:#2b3448; --navy:#243252; --green:#3ec46a; --green-soft:#173123; --blue:#7c95f2; --magenta:#ea7bd0; --amber:#e0a13a; --amber-soft:#3a2d12; --red:#ef6a6a; --code-bg:#1f283b; } }
+:root[data-theme="dark"]{ --paper:#0f1420; --ground:#0f1420; --surface:#182034; --ink:#e6e8ee; --ink2:#c3c8d4; --muted:#98a0b3; --line:#2b3448; --navy:#243252; --green:#3ec46a; --green-soft:#173123; --blue:#7c95f2; --magenta:#ea7bd0; --amber:#e0a13a; --amber-soft:#3a2d12; --red:#ef6a6a; --code-bg:#1f283b; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.55 var(--body)}
+a{color:var(--blue)}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px 60px}
+header.masthead{background:var(--navy);color:var(--navy-ink);padding:28px 0 22px}
+header.masthead .wrap{padding-bottom:0}
+.kicker{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+h1{font:700 40px/1.05 var(--display);margin:8px 0 10px;text-wrap:balance}
+.lead{max-width:62ch;margin:0;font-size:17px;opacity:.92}
+nav.toc{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 18px;margin:22px 0 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 18px;font-size:14px}
+nav.toc a{text-decoration:none;color:var(--ink2)} nav.toc a:hover{color:var(--blue)}
+nav.toc a b{font-family:var(--mono);color:var(--green);margin-right:6px;font-weight:600}
+section{margin-top:38px}
+h2{font:700 27px/1.15 var(--display);margin:0 0 12px;padding-top:10px;border-top:3px solid var(--green);text-wrap:balance}
+h2 .n{font:600 14px var(--mono);color:var(--green);display:block;margin-bottom:2px;letter-spacing:.08em}
+h3{font:700 19px/1.2 var(--display);margin:22px 0 8px}
+p{max-width:68ch}
+ul,ol{max-width:68ch;padding-left:22px} li{margin:5px 0}
+.steps{counter-reset:s;list-style:none;padding:0;max-width:none}
+.steps li{counter-increment:s;position:relative;padding:11px 0 11px 50px;border-bottom:1px solid var(--line);margin:0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:9px;font:700 17px/34px var(--display);text-align:center;width:34px;height:34px;border-radius:50%;background:var(--green-soft);color:var(--green)}
+.steps li:last-child{border-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:14px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px 18px}
+.card h3{margin-top:0}
+.card.dev h3::before{content:"";display:inline-block;width:14px;height:10px;border:2px solid var(--muted);border-radius:2px;margin-right:8px;vertical-align:-1px}
+.card.phone h3::before{content:"";display:inline-block;width:9px;height:14px;border:2px solid var(--muted);border-radius:3px;margin-right:8px;vertical-align:-2px}
+kbd{font:600 12.5px var(--mono);background:var(--code-bg);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap;color:var(--ink)}
+code{font:14px var(--mono);background:var(--code-bg);padding:0 4px;border-radius:3px;word-break:break-word}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font:13px/1.5 var(--mono);max-width:100%}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:10px 0}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td:first-child{white-space:nowrap}
+.tblwrap{overflow-x:auto}
+figure{margin:16px 0}
+figure img{width:100%;height:auto;border:1px solid var(--line);border-radius:4px;display:block}
+figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+.zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:14px 0}
+.zone{border-left:4px solid var(--blue);background:var(--surface);border-radius:0 6px 6px 0;padding:10px 14px;font-size:14.5px}
+.zone b{display:block;font-family:var(--display);font-size:16px}
+.zone.left{border-color:var(--green)} .zone.chart{border-color:var(--magenta)} .zone.foot{border-color:var(--muted)}
+.callout{border-left:4px solid var(--amber);background:var(--amber-soft);padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0;max-width:none}
+.callout.ok{border-color:var(--green);background:var(--green-soft)}
+.callout p{margin:0;max-width:none}
+.swatch{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+.legend li{list-style:none} .legend{padding-left:0}
+.ok-pill,.na-pill{font:600 11.5px var(--mono);padding:1px 7px;border-radius:9px}
+.ok-pill{background:var(--green-soft);color:var(--green)} .na-pill{background:var(--code-bg);color:var(--muted)}
+footer{margin-top:50px;padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+@media (max-width:600px){ h1{font-size:32px} body{font-size:15px} }
+@media (prefers-reduced-motion: no-preference){ html{scroll-behavior:smooth} }
+</style>
+
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker">Monitor NYSE · visionariosbolsa</div>
+    <h1>Manual de MarketSurge Web</h1>
+    <p class="lead">Cómo abrir la pantalla en la laptop y en el celular, cómo leer cada zona del gráfico estilo IBD y cómo usar listas, alertas, notas y el screen para tomar decisiones de inversión.</p>
+  </div>
+</header>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contenido">
+  <a href="#que-es"><b>01</b>Qué es la herramienta</a>
+  <a href="#laptop"><b>02</b>Abrir en la laptop</a>
+  <a href="#celular"><b>03</b>Abrir en el celular</a>
+  <a href="#primer-uso"><b>04</b>Primer uso</a>
+  <a href="#pantalla"><b>05</b>Leer la pantalla</a>
+  <a href="#grafico"><b>06</b>Leer el gráfico</a>
+  <a href="#ratings"><b>07</b>Ratings y datos</a>
+  <a href="#navegar"><b>08</b>Navegar y atajos</a>
+  <a href="#listas"><b>09</b>Listas, alertas y notas</a>
+  <a href="#screen"><b>10</b>Screen y plan de posición</a>
+  <a href="#ajustes"><b>11</b>Ajustes y clave Finnhub</a>
+  <a href="#rutina"><b>12</b>Rutina de decisión</a>
+  <a href="#problemas"><b>13</b>Problemas frecuentes</a>
+  <a href="#limites"><b>14</b>Límites que debes conocer</a>
+</nav>
+
+<section id="que-es">
+  <h2><span class="n">01</span>Qué es la herramienta</h2>
+  <p>MarketSurge Web es una página que reproduce la pantalla de análisis de MarketSurge (Investor's Business Daily) con datos gratuitos. Se abre en cualquier navegador, no requiere instalar programas y guarda tus listas, notas y alertas en el propio navegador.</p>
+  <p>Forma parte del mismo sitio que el Monitor de Portafolio. Son dos archivos:</p>
+  <ul>
+    <li><code>index.html</code>, el monitor de posiciones con RSI, metas y stop-loss.</li>
+    <li><code>marketsurge.html</code>, la pantalla de gráfico con ratings, línea RS, resultados y fundamentales.</li>
+  </ul>
+  <p>Ambos se enlazan entre sí: el botón verde <b>Monitor Portafolio</b> lleva al monitor, y el botón <b>📈 MarketSurge</b> del monitor abre esta pantalla.</p>
+  <figure><img src="./docs/manual-pantalla.png" alt="Pantalla completa de MarketSurge Web con el gráfico semanal de una acción"><figcaption>Pantalla completa en la laptop, vista semanal. La captura usa datos de prueba.</figcaption></figure>
+</section>
+
+<section id="laptop">
+  <h2><span class="n">02</span>Abrir en la laptop</h2>
+  <p>Hay tres formas. La primera es la recomendada porque siempre carga la última versión publicada.</p>
+  <div class="grid2">
+    <div class="card dev">
+      <h3>A. Desde internet (GitHub Pages)</h3>
+      <ol class="steps">
+        <li>Abre Chrome, Edge, Safari o Firefox.</li>
+        <li>Escribe la dirección del sitio y añade <code>marketsurge.html</code>. Con el repositorio publicado en GitHub Pages queda así:<br><code>https://ggallo100.github.io/MONITOR-FINAL/marketsurge.html</code></li>
+        <li>Guárdala en marcadores. Para abrir directamente una acción añade el símbolo al final: <code>marketsurge.html#NVDA</code>.</li>
+      </ol>
+      <p style="font-size:14px;color:var(--muted)">Si la dirección no responde, GitHub Pages no está activado: en el repositorio ve a <b>Settings → Pages</b>, elige <b>Deploy from a branch</b>, rama <b>main</b>, carpeta <b>/ (root)</b> y guarda. Tarda uno o dos minutos en publicarse.</p>
+    </div>
+    <div class="card dev">
+      <h3>B. Como aplicación instalada</h3>
+      <ol class="steps">
+        <li>Abre la dirección anterior en Chrome o Edge.</li>
+        <li>En la barra de direcciones aparece un icono de instalar (un monitor con una flecha). Púlsalo y acepta.</li>
+        <li>Queda un acceso directo en el escritorio y en el menú de inicio, con ventana propia y sin pestañas.</li>
+      </ol>
+    </div>
+    <div class="card dev">
+      <h3>C. Desde el archivo descargado</h3>
+      <ol class="steps">
+        <li>Descarga el repositorio desde GitHub con <b>Code → Download ZIP</b> y descomprímelo.</li>
+        <li>Haz doble clic en <code>marketsurge.html</code>. Se abre en el navegador predeterminado y carga datos igual que en línea.</li>
+        <li>Esta forma no se actualiza sola ni se instala como app, pero sirve sin publicar nada.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="callout"><p><b>Pantalla recomendada:</b> 1366 píxeles de ancho o más. Con ventanas estrechas el panel de datos pasa debajo del gráfico, igual que en el celular.</p></div>
+</section>
+
+<section id="celular">
+  <h2><span class="n">03</span>Abrir en el celular</h2>
+  <p>La misma dirección funciona en el teléfono. Instálala en la pantalla de inicio para que abra a pantalla completa como una app.</p>
+  <div class="grid2">
+    <div class="card phone">
+      <h3>iPhone y iPad (Safari)</h3>
+      <ol class="steps">
+        <li>Abre Safari y entra en <code>https://ggallo100.github.io/MONITOR-FINAL/marketsurge.html</code>.</li>
+        <li>Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).</li>
+        <li>Elige <b>Añadir a pantalla de inicio</b> y confirma. Aparece el icono «MarketSurge Web».</li>
+        <li>Ábrela siempre desde ese icono. Gira el teléfono en horizontal para ver el gráfico más grande.</li>
+      </ol>
+    </div>
+    <div class="card phone">
+      <h3>Android (Chrome)</h3>
+      <ol class="steps">
+        <li>Abre Chrome y entra en la misma dirección.</li>
+        <li>Toca el menú <b>⋮</b> arriba a la derecha.</li>
+        <li>Elige <b>Instalar aplicación</b> o <b>Añadir a pantalla de inicio</b> y confirma.</li>
+        <li>Chrome también muestra un aviso «Añadir MarketSurge Web a la pantalla de inicio» al pie; sirve igual.</li>
+      </ol>
+    </div>
+  </div>
+  <h3>Qué cambia en el celular</h3>
+  <ul>
+    <li>El gráfico ocupa la parte superior y el panel de datos (EPS, ratings, trimestres) queda debajo. Desplázate hacia abajo para verlo.</li>
+    <li>Las pestañas laterales se convierten en dos botones de la barra superior: <b>☰</b> abre listas, alertas y notas; <b>ℹ</b> abre noticias, estadísticas y grupo.</li>
+    <li>Arrastra con un dedo para desplazar el gráfico en el tiempo y pellizca con dos para acercar o alejar.</li>
+    <li>Las alertas solo se comprueban mientras la página está abierta en primer plano. El teléfono no las revisa en segundo plano.</li>
+  </ul>
+  <figure style="max-width:360px"><img src="./docs/manual-movil.png" alt="Vista de MarketSurge Web en un teléfono en vertical"><figcaption>Vista vertical en el teléfono.</figcaption></figure>
+</section>
+
+<section id="primer-uso">
+  <h2><span class="n">04</span>Primer uso</h2>
+  <ol class="steps">
+    <li>Al abrir por primera vez se carga el primer símbolo de la lista predeterminada («Mi lista» trae NVDA, ASML, AMD, AVGO, TSM, MU, APP, META, BABA y GLD). Después recuerda el último símbolo que miraste.</li>
+    <li>Escribe un símbolo en la casilla de la esquina superior izquierda (por ejemplo <code>APP</code>) y pulsa <kbd>Intro</kbd>. También puedes escribir el nombre de la empresa y elegir en la lista de sugerencias.</li>
+    <li>El gráfico aparece en uno o dos segundos. Los fundamentales, las noticias y los ratings llegan un instante después, en una segunda oleada.</li>
+    <li>El punto verde junto a la fecha indica «precio cargado» y luego «en vivo · hora ET». Si está rojo, revisa el apartado de problemas frecuentes.</li>
+  </ol>
+  <div class="callout ok"><p><b>Símbolos que admite:</b> cualquiera que exista en Yahoo Finance. Acciones de Estados Unidos por su ticker (<code>NVDA</code>), ETF (<code>GLD</code>, <code>SOXL</code>), índices con acento circunflejo (<code>^GSPC</code>, <code>^VIX</code>) y bolsas extranjeras con sufijo (<code>ASML.AS</code>, <code>SAN.MC</code>).</p></div>
+</section>
+
+<section id="pantalla">
+  <h2><span class="n">05</span>Leer la pantalla</h2>
+  <p>La pantalla sigue el orden de MarketSurge. De arriba abajo y de izquierda a derecha:</p>
+  <div class="zones">
+    <div class="zone"><b>Barra de herramientas</b>Casilla de símbolo, botones Daily / Weekly / Monthly, número de barras visibles, navegación por fecha (◀ fecha ▶ y ⇥ para volver a hoy), estado de la conexión, campana de alertas y ajustes ⚙.</div>
+    <div class="zone"><b>Título y listas</b>Nombre de la empresa, bandera ⚑ que marca si el símbolo está en la lista activa, selector «Add to List» con el botón + Añadir, impresión y pantalla completa.</div>
+    <div class="zone"><b>Cabecera de datos</b>Símbolo, bolsa e industria; capitalización, flotante y acciones en circulación; precio, cambio del día, volumen frente a la media de 50 días y hora de la última actualización. Debajo: IPO, fecha de resultados (EPS Due), volumen medio, distancia al máximo de 52 semanas, rango de 52 semanas y beta / alfa.</div>
+    <div class="zone left"><b>Panel de datos (izquierda)</b>EPS anual con % de cambio, ratings, crecimiento y ratios, deuda e I+D, «Top RS in Grp» o «RS en lista», analistas, y la tabla trimestral de EPS y ventas con su % interanual.</div>
+    <div class="zone chart"><b>Gráfico (derecha)</b>Precio con medias y línea RS, franja de marcadores de resultados, volumen con su media y eje de fechas. Arriba a la izquierda, la lectura de la barra bajo el cursor; arriba a la derecha, los interruptores de cada capa.</div>
+    <div class="zone foot"><b>Pie</b>Fuente de los datos y aviso de que los ratings marcados «est.» son estimaciones.</div>
+  </div>
+</section>
+
+<section id="grafico">
+  <h2><span class="n">06</span>Leer el gráfico</h2>
+  <h3>Barras de precio</h3>
+  <ul class="legend">
+    <li><span class="swatch" style="background:var(--blue)"></span><b>Azul:</b> la barra cerró igual o por encima del cierre anterior.</li>
+    <li><span class="swatch" style="background:var(--magenta)"></span><b>Magenta:</b> la barra cerró por debajo del cierre anterior.</li>
+    <li>Cada barra muestra máximo y mínimo; la marca a la derecha es el cierre y la de la izquierda, la apertura.</li>
+    <li>La escala es logarítmica (casilla <b>Log</b>): un movimiento del 10 % mide lo mismo a 20 $ que a 400 $, como en MarketSurge.</li>
+    <li>La línea punteada gris con etiqueta de color es el último precio.</li>
+  </ul>
+  <h3>Medias móviles</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Vista</th><th>Línea roja</th><th>Línea negra</th><th>Línea verde (apagada por defecto)</th></tr>
+    <tr><td>Weekly</td><td>Media de 10 semanas</td><td>Media de 40 semanas</td><td>EMA de 21 semanas</td></tr>
+    <tr><td>Daily</td><td>Media de 50 días</td><td>Media de 200 días</td><td>EMA de 21 días</td></tr>
+    <tr><td>Monthly</td><td>Media de 10 meses</td><td>Media de 40 meses</td><td>EMA de 21 meses</td></tr>
+  </table></div>
+  <p>Una acción líder suele cotizar por encima de la media de 10 semanas y ésta por encima de la de 40. Cuando el precio cae bajo la de 40 semanas con volumen, la tendencia intermedia está rota.</p>
+  <h3>Línea RS (azul fina)</h3>
+  <p>Es el precio dividido por el S&amp;P 500 (se puede cambiar el índice en Ajustes). Si sube, la acción va mejor que el mercado; si baja, va peor aunque el precio suba. Al final de la línea aparece el <b>RS Rating est.</b>, de 1 a 99. Una línea RS que marca máximos antes que el precio es una de las señales que más valora IBD.</p>
+  <h3>Marcadores de resultados</h3>
+  <ul>
+    <li>Cada triángulo negro bajo el precio es una publicación de resultados. Debajo se lee el cambio interanual del EPS de ese trimestre, en verde si sube y en rojo si baja.</li>
+    <li>El triángulo naranja <b>EPS Due</b> indica la próxima publicación y los días que faltan.</li>
+    <li>Un asterisco (<code>*</code>) significa fecha estimada: cierre del trimestre más 35 días. Con clave de Finnhub se usan las fechas confirmadas.</li>
+  </ul>
+  <h3>Volumen</h3>
+  <p>Las barras usan el mismo color que el precio. La línea roja es la media de 50 días (10 semanas en la vista semanal). Una ruptura vale cuando el volumen supera claramente esa media; una caída con volumen alto es distribución.</p>
+</section>
+
+<section id="ratings">
+  <h2><span class="n">07</span>Ratings y datos del panel</h2>
+  <p>Los ratings de IBD son propietarios. Esta herramienta los reconstruye con la metodología pública de IBD y los marca con la etiqueta <b>est.</b> Sirven para comparar acciones entre sí y para filtrar, no como cifra oficial de MarketSurge.</p>
+  <div class="tblwrap"><table>
+    <tr><th>Dato</th><th>Cómo se calcula aquí</th><th>Estado</th></tr>
+    <tr><td>EPS Rating</td><td>Crecimiento del EPS de los dos últimos trimestres y crecimiento anual de tres años, convertido a percentil 1-99. Sin beneficios no pasa de 45.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>RS Rating</td><td>Retorno de 12 meses ponderado como hace IBD (40 % el último trimestre, 20 % cada uno de los tres anteriores) frente al índice, convertido a 1-99.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>Acc/Dis Rating</td><td>Flujo de dinero de las últimas 13 semanas: dónde cierra cada día dentro de su rango y volumen en días alcistas frente a bajistas. Letras A a E.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>SMR Rating</td><td>Crecimiento de ventas, margen antes de impuestos y ROE. Letras A a E.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>Composite Rating</td><td>Media ponderada de EPS, RS, Acc/Dis, SMR y distancia al máximo de 52 semanas.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>Group RS Rating</td><td>Media del RS de los pares del grupo (con Finnhub) o de tu lista activa.</td><td><span class="ok-pill">est.</span></td></tr>
+    <tr><td>Timeliness, Sponsorship, flotante, interés en corto, propiedad de fondos</td><td>No existen en fuentes gratuitas. Se muestran como N/A.</td><td><span class="na-pill">N/A</span></td></tr>
+    <tr><td>EPS anual y trimestral, ventas, P/E, ROE, deuda, I+D, flujo de caja, valor en libros</td><td>Directamente de los estados financieros publicados en Yahoo Finance. Hasta 22 trimestres.</td><td><span class="ok-pill">real</span></td></tr>
+    <tr><td>Beta y Alpha</td><td>Regresión de los retornos diarios del último año frente al índice. Alfa anualizada.</td><td><span class="ok-pill">calc.</span></td></tr>
+    <tr><td>U/D Vol Ratio</td><td>Volumen de los días alcistas dividido por el de los bajistas en 50 días. Por encima de 1 hay acumulación.</td><td><span class="ok-pill">calc.</span></td></tr>
+  </table></div>
+</section>
+
+<section id="navegar">
+  <h2><span class="n">08</span>Navegar y atajos de teclado</h2>
+  <ul>
+    <li><b>Rueda del ratón</b> sobre el gráfico: acerca o aleja. <b>Arrastrar</b>: desplaza en el tiempo. <b>Doble clic</b>: vuelve a hoy.</li>
+    <li><b>◀ ▶</b> junto a la fecha mueven una barra; con <kbd>Shift</kbd> pulsado, diez. El campo de fecha sitúa esa fecha en el borde derecho.</li>
+    <li>El selector <b>250 barras</b> fija cuántas barras se ven. En semanal, 250 barras son casi cinco años.</li>
+    <li>Las casillas de la esquina superior derecha del gráfico encienden o apagan cada media, la línea RS, los marcadores EPS y la escala logarítmica.</li>
+  </ul>
+  <div class="tblwrap"><table>
+    <tr><th>Tecla</th><th>Acción</th></tr>
+    <tr><td><kbd>Intro</kbd></td><td>Cargar el símbolo escrito en la casilla</td></tr>
+    <tr><td><kbd>Espacio</kbd> / <kbd>Retroceso</kbd></td><td>Siguiente / anterior símbolo de la lista activa (igual que en MarketSurge)</td></tr>
+    <tr><td><kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd></td><td>Vista diaria, semanal o mensual</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Desplazar una barra; con <kbd>Shift</kbd>, diez</td></tr>
+    <tr><td><kbd>Inicio</kbd></td><td>Volver a hoy</td></tr>
+    <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Acercar / alejar</td></tr>
+    <tr><td>Cualquier letra o número</td><td>Salta a la casilla de símbolo y empieza a escribir</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cerrar cajones laterales y ajustes</td></tr>
+  </table></div>
+</section>
+
+<section id="listas">
+  <h2><span class="n">09</span>Listas, alertas y notas</h2>
+  <p>La pestaña vertical <b>SCREENS · ALERTAS · NOTAS</b> del borde izquierdo (botón ☰ en el celular) abre un cajón con cuatro pestañas.</p>
+  <h3>Listas</h3>
+  <ul>
+    <li>Crea listas con <b>Nueva</b> (por ejemplo «Semiconductores», «China ADR», «Rupturas de la semana»).</li>
+    <li>Añade símbolos en la casilla, o desde la pantalla principal con <b>+ Añadir</b> o la bandera ⚑ junto al nombre.</li>
+    <li>Toca un símbolo para cargarlo. Recorre la lista con <kbd>Espacio</kbd> y <kbd>Retroceso</kbd>.</li>
+    <li><b>Calcular RS de la lista</b> descarga un año de cada símbolo y ordena por RS est. <b>Exportar</b> muestra los símbolos separados por comas para copiarlos; <b>Importar</b> los pega de vuelta.</li>
+  </ul>
+  <h3>Alertas</h3>
+  <ul>
+    <li>Indica símbolo, condición (≥ sube a, ≤ baja a) y precio. Se comprueban en cada actualización de la cotización, aunque estés mirando otro símbolo de la misma pantalla.</li>
+    <li>Cuando se dispara, aparece un aviso naranja y, si concediste permiso en Ajustes, una notificación del navegador. La campana 🔔 de la barra muestra cuántas alertas siguen activas.</li>
+    <li>↺ reactiva una alerta disparada; ✕ la borra.</li>
+  </ul>
+  <h3>Notas</h3>
+  <p>Un bloc de texto por símbolo que se guarda solo. Úsalo para la tesis, el pivote del patrón, el stop y los catalizadores. Debajo está el plan de posición, explicado en el siguiente apartado.</p>
+  <div class="callout"><p><b>Dónde se guardan:</b> listas, alertas y notas viven en el navegador de ese dispositivo. La laptop y el celular no se sincronizan entre sí. Para pasar una lista, usa Exportar en uno e Importar en el otro.</p></div>
+</section>
+
+<section id="screen">
+  <h2><span class="n">10</span>Screen y plan de posición</h2>
+  <h3>Screen CAN SLIM sobre la lista</h3>
+  <p>En la pestaña <b>Screens</b> marca los criterios y pulsa <b>Ejecutar screen</b>. La herramienta descarga un año de cada símbolo de la lista activa y muestra los que cumplen, ordenados por RS.</p>
+  <ul>
+    <li><b>RS ≥ 80:</b> la acción supera al 80 % del mercado en 12 meses.</li>
+    <li><b>Precio &gt; MA 40 semanas:</b> tendencia intermedia alcista.</li>
+    <li><b>≤ 25 % del máximo de 52 semanas:</b> IBD compra cerca de máximos, no en el fondo.</li>
+  </ul>
+  <p>La tabla muestra RS, retorno de 3 meses, posición frente a la media de 200 días y distancia al máximo. Toca un símbolo para cargarlo.</p>
+  <h3>Plan de posición (regla del 6 %)</h3>
+  <p>En la pestaña <b>Notas</b>, introduce capital, precio de entrada y stop. La calculadora aplica la fórmula que usas en tu operativa:</p>
+  <pre><code>Tamaño máximo = (Capital × 6 %) ÷ Distancia al stop (%)</code></pre>
+  <p>Devuelve el importe máximo, el porcentaje del capital y el número de acciones. Avisa en rojo si la posición supera el 40 % del capital o si el stop queda a más del 8 %, fuera de la regla CAN SLIM de cortar pérdidas al 7-8 %.</p>
+</section>
+
+<section id="ajustes">
+  <h2><span class="n">11</span>Ajustes y clave Finnhub</h2>
+  <p>El botón ⚙ abre los ajustes. Se guardan al pulsar <b>Guardar</b> y recargan el símbolo actual.</p>
+  <div class="tblwrap"><table>
+    <tr><th>Ajuste</th><th>Para qué sirve</th></tr>
+    <tr><td>Actualización automática</td><td>Segundos entre refrescos con el mercado abierto (15 por defecto, mínimo 5). Con el mercado cerrado refresca cada 5 minutos.</td></tr>
+    <tr><td>Índice de referencia</td><td>Índice contra el que se calcula la línea RS y el RS Rating: S&amp;P 500, Nasdaq Composite, QQQ o SPY.</td></tr>
+    <tr><td>Clave de Finnhub</td><td>Opcional y gratuita. Añade fechas de resultados confirmadas, EPS Due exacto, pares del grupo industrial, estimaciones de EPS de analistas, recomendaciones, IPO y teléfono.</td></tr>
+    <tr><td>Proxies CORS</td><td>Intermediarios para llamar a Yahoo Finance desde el navegador. Se prueban en orden y se recuerda el que responde. <b>Probar proxies</b> mide cada uno.</td></tr>
+    <tr><td>Notificaciones</td><td>Pide permiso al navegador para avisar de alertas con notificación del sistema.</td></tr>
+    <tr><td>Pre/post-mercado</td><td>Incluye la cotización fuera de horario en el precio en vivo.</td></tr>
+  </table></div>
+  <h3>Obtener la clave de Finnhub (5 minutos)</h3>
+  <ol class="steps">
+    <li>Entra en <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io/register</a> y crea una cuenta gratuita.</li>
+    <li>En el panel aparece tu <b>API key</b>. Cópiala.</li>
+    <li>En MarketSurge Web abre ⚙, pégala en «Clave de Finnhub» y guarda. Las fechas dejan de llevar asterisco.</li>
+  </ol>
+  <h3>Proxy propio (opcional, si los públicos van lentos)</h3>
+  <p>Un Cloudflare Worker gratuito de diez líneas hace de intermediario solo para Yahoo. Crea un Worker en dash.cloudflare.com, pega este código y pon su dirección como primer proxy con el formato <code>https://tu-worker.workers.dev/?url=</code>.</p>
+  <pre><code>export default {
+  async fetch(req) {
+    const u = new URL(req.url).searchParams.get('url');
+    if (!u || !u.startsWith('https://query1.finance.yahoo.com/'))
+      return new Response('url no permitida', { status: 400 });
+    const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    return new Response(r.body, { status: r.status,
+      headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
+  }
+};</code></pre>
+</section>
+
+<section id="rutina">
+  <h2><span class="n">12</span>Rutina de decisión sugerida</h2>
+  <p>Una forma de recorrer la pantalla en menos de un minuto por acción, en el orden en que la comunidad lee MarketSurge:</p>
+  <ol class="steps">
+    <li><b>Tendencia:</b> vista Weekly. ¿Precio sobre la media de 10 semanas y ésta sobre la de 40? Si no, esperar.</li>
+    <li><b>Fuerza relativa:</b> ¿la línea RS sube y el RS est. está por encima de 80? ¿Marca máximos antes que el precio?</li>
+    <li><b>Beneficios:</b> tabla trimestral. ¿Los dos últimos trimestres crecen más del 25 % en EPS y las ventas acompañan?</li>
+    <li><b>Patrón y pivote:</b> ¿hay una base de al menos 5-7 semanas y el precio está a menos del 5 % por encima del pivote? Anota el pivote en Notas.</li>
+    <li><b>Volumen:</b> ¿la ruptura llega con volumen 40-50 % sobre la media roja? ¿U/D Vol Ratio por encima de 1?</li>
+    <li><b>Catalizador:</b> ¿cuántos días faltan para EPS Due? Entrar a dos días de resultados es una apuesta binaria, no una operación.</li>
+    <li><b>Riesgo:</b> fija el stop (7-8 % o el mínimo de la base) y dimensiona con la calculadora del 6 %. Crea la alerta del stop y la del pivote.</li>
+  </ol>
+  <div class="callout"><p><b>Honestidad:</b> los ratings est. y los datos gratuitos tienen menos precisión que MarketSurge. La herramienta ordena la información; la decisión y el riesgo siguen siendo tuyos.</p></div>
+</section>
+
+<section id="problemas">
+  <h2><span class="n">13</span>Problemas frecuentes</h2>
+  <div class="tblwrap"><table>
+    <tr><th>Síntoma</th><th>Causa y solución</th></tr>
+    <tr><td>«No se pudo cargar» y punto rojo</td><td>Ningún proxy responde. Abre ⚙ → <b>Probar proxies</b>. Si todos fallan, espera un minuto (los públicos tienen cuotas) o añade un proxy propio. Comprueba también que el símbolo existe en Yahoo.</td></tr>
+    <tr><td>Precio distinto al de tu bróker</td><td>Yahoo entrega Nasdaq casi al instante y otros mercados con hasta 15 minutos de retraso. Para decisiones de segundos usa el bróker; esta pantalla es para análisis.</td></tr>
+    <tr><td>Fechas con asterisco</td><td>Son estimadas. Pega una clave de Finnhub en Ajustes.</td></tr>
+    <tr><td>Muchos N/A en el panel</td><td>Yahoo no publica esa partida para ese valor (habitual en ETF, ADR e índices) o son datos que no existen en fuentes gratuitas (fondos, flotante).</td></tr>
+    <tr><td>Tabla trimestral vacía</td><td>Los ETF y los índices no tienen resultados. En acciones, recarga: la segunda oleada de datos pudo fallar por cuota del proxy.</td></tr>
+    <tr><td>El símbolo no aparece</td><td>Usa el ticker de Yahoo: bolsas extranjeras llevan sufijo (<code>.AS</code>, <code>.MC</code>, <code>.HK</code>), índices llevan <code>^</code>. Escribe el nombre y elige en las sugerencias.</td></tr>
+    <tr><td>Perdí listas o notas</td><td>Se guardan en el navegador. Borrar «datos de sitios» o usar ventana privada las elimina. Exporta las listas de vez en cuando.</td></tr>
+    <tr><td>La app instalada muestra una versión vieja</td><td>Ciérrala del todo y ábrela de nuevo. Guarda una copia en caché para funcionar sin conexión y se actualiza al segundo arranque.</td></tr>
+    <tr><td>No llegan notificaciones en el celular</td><td>iOS solo notifica con la app en primer plano. Usa las alertas del bróker para avisos fuera de la pantalla.</td></tr>
+  </table></div>
+</section>
+
+<section id="limites">
+  <h2><span class="n">14</span>Límites que debes conocer</h2>
+  <ul>
+    <li><b>Datos gratuitos.</b> Precios y fundamentales vienen de Yahoo Finance a través de proxies públicos. Pueden fallar en momentos de mucho tráfico.</li>
+    <li><b>Ratings estimados.</b> Ninguno es el número oficial de IBD. Compáralos entre acciones, no contra MarketSurge.</li>
+    <li><b>Sin datos institucionales.</b> Fondos que poseen la acción, Sponsorship, flotante e interés en corto no están disponibles.</li>
+    <li><b>Historial trimestral limitado.</b> Yahoo entrega unos cinco años de trimestres. Las estimaciones de EPS futuras requieren Finnhub.</li>
+    <li><b>Un dispositivo, sus datos.</b> No hay cuenta ni nube: cada navegador guarda lo suyo.</li>
+  </ul>
+</section>
+
+<footer>MarketSurge Web · Monitor NYSE / NASDAQ · Manual de uso. MarketSurge e IBD son marcas de Investor's Business Daily; esta herramienta es independiente y usa su metodología pública.</footer>
+</div>
+
+</body>
+</html>
