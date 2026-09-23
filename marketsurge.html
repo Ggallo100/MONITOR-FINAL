@@ -396,10 +396,15 @@ canvas#chart{display:block;width:100%;height:100%;cursor:crosshair;touch-action:
     <div class="in">
       <label for="setProvider">Fuente de precios</label>
       <select id="setProvider">
+        <option value="alpaca">Alpaca — tiempo real, usa las claves del Monitor (recomendado)</option>
         <option value="yahoo">Yahoo Finance — gratis, sin registro, necesita proxy</option>
         <option value="twelvedata">Twelve Data — clave gratuita, sin proxy (más fiable)</option>
       </select>
       <div class="help" id="provHelp"></div>
+
+      <div id="alBlock" class="hidden">
+        <div class="help" id="alStatus"></div>
+      </div>
 
       <div id="tdBlock" class="hidden">
         <label for="setTdKey">Clave de Twelve Data</label>
@@ -638,11 +643,13 @@ function parseChart(json){
   return {meta: res.meta || {}, bars, divs};
 }
 async function loadDaily(ticker, range='10y'){
+  if(usingAlpaca()) return loadDailyAlpaca(ticker, range);
   if(usingTD()) return loadDailyTD(ticker, range);
   const j = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}&events=div&includePrePost=false`);
   return parseChart(j);
 }
 async function loadLive(ticker){
+  if(usingAlpaca()) return loadLiveAlpaca(ticker);
   if(usingTD()) return loadLiveTD(ticker);
   const j = await yahooFetch(`/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d&includePrePost=${S.settings.prePost?'true':'false'}`);
   return parseChart(j);
@@ -690,6 +697,107 @@ async function loadLiveTD(ticker){
   const bar = {t: Math.floor(d.getTime()/1000), d, o:+j.open || c, h:+j.high || c, l:+j.low || c, c, v:+j.volume || 0, adj:c};
   return {meta:{symbol:ticker, longName:j.name, currency:j.currency, exchangeName:j.exchange, fullExchangeName:j.exchange,
     regularMarketPrice:c, regularMarketVolume:+j.volume || 0, regularMarketTime: +j.timestamp || bar.t}, bars:[bar], divs:[]};
+}
+
+/* ---- Alpaca: la misma conexión que ya usa el Monitor de Portafolio --------
+   Las dos páginas se sirven desde el mismo sitio, así que comparten el
+   almacenamiento del navegador: se leen las claves guardadas en el Monitor
+   (Ajustes → Conexión con Alpaca) sin pedirlas otra vez. El navegador llama a
+   Alpaca directamente, sin proxy.
+   · Histórico: feed consolidado SIP. El plan gratuito lo permite siempre que la
+     consulta excluya los últimos 15 minutos, y da el volumen de todo el mercado
+     en lugar del ~3 % que ve IEX (clave para Acc/Dis y las barras de volumen).
+   · Precio en vivo: instantánea del feed configurado en el Monitor (IEX gratis). */
+const MONITOR_STORE = 'ggm.monitor.nyse.v1';
+function alpacaCreds(){
+  try{
+    const m = (JSON.parse(localStorage.getItem(MONITOR_STORE) || '{}').settings) || {};
+    if(m.alpacaKey && m.alpacaSecret)
+      return {key:String(m.alpacaKey).trim(), secret:String(m.alpacaSecret).trim(), feed: m.alpacaFeed === 'sip' ? 'sip' : 'iex'};
+  }catch(e){}
+  return null;
+}
+function alpacaOk(){ return !!alpacaCreds(); }
+function usingAlpaca(){ return S.settings.provider === 'alpaca'; }
+let alpacaAuth = 'apca';   // 'apca' = claves de Trading API · 'basic' = claves de Broker API
+async function alpacaGet(path, ms=20000){
+  const c = alpacaCreds();
+  if(!c) throw new Error('no hay claves de Alpaca: pégalas en el Monitor de Portafolio → Ajustes → Conexión con Alpaca');
+  const url = 'https://data.alpaca.markets' + path;
+  const call = async scheme => {
+    const headers = scheme === 'basic'
+      ? {Authorization: 'Basic ' + btoa(c.key + ':' + c.secret)}
+      : {'APCA-API-KEY-ID': c.key, 'APCA-API-SECRET-KEY': c.secret};
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+    try{ return await fetch(url, {headers, signal:ctl.signal}); }
+    catch(e){ throw new Error(e.name === 'AbortError' ? 'Alpaca tardó más de ' + Math.round(ms/1000) + ' s' : 'Alpaca no respondió (red o CORS)'); }
+    finally{ clearTimeout(t); }
+  };
+  const detailOf = async res => { try{ const j = await res.json(); return (j && (j.message || j.msg)) || ''; }catch(e){ return ''; } };
+  const mkErr = (status, detail) => {
+    const plan = status === 403 && /subscription|permit|sip/i.test(detail);   // límite del plan, no claves malas
+    const err = new Error(plan ? 'tu plan de Alpaca no incluye ese dato' : (status === 401 || status === 403) ? 'Alpaca rechazó las claves (' + status + ')' : 'Alpaca HTTP ' + status + (detail ? ' · ' + detail : ''));
+    err.status = status; err.plan = plan; return err;
+  };
+  let r = await call(alpacaAuth);
+  if(r.status === 401 || r.status === 403){
+    const detail = await detailOf(r);
+    if(r.status === 403 && /subscription|permit|sip/i.test(detail)) throw mkErr(403, detail);
+    const other = alpacaAuth === 'apca' ? 'basic' : 'apca';   // claves de Trading API o de Broker API
+    const r2 = await call(other);
+    if(!r2.ok) throw mkErr(r2.status, await detailOf(r2));
+    alpacaAuth = other; r = r2;
+  }
+  if(!r.ok) throw mkErr(r.status, await detailOf(r));
+  return r.json();
+}
+const AL_INDEX = {'^GSPC':'SPY', '^IXIC':'QQQ', '^NDX':'QQQ', '^DJI':'DIA', '^RUT':'IWM'};
+function alSymbol(t){ return AL_INDEX[t] || t; }   // Alpaca no sirve índices: se usa su ETF
+async function alpacaBarsAll(sym, start, feed, end){
+  const out = []; let token = null, guard = 0;
+  do{
+    const j = await alpacaGet(`/v2/stocks/bars?symbols=${encodeURIComponent(sym)}&timeframe=1Day&start=${start}`
+      + (end ? `&end=${encodeURIComponent(end)}` : '') + `&limit=10000&adjustment=split&feed=${feed}`
+      + (token ? `&page_token=${encodeURIComponent(token)}` : ''));
+    const arr = Array.isArray(j.bars) ? j.bars : ((j.bars && j.bars[sym]) || []);
+    out.push(...arr);
+    token = j.next_page_token || null;
+  } while(token && ++guard < 25);
+  return out;
+}
+async function loadDailyAlpaca(ticker, range){
+  const sym = alSymbol(ticker);
+  const days = range === '5d' ? 12 : range === '1y' ? 400 : range === '5y' ? 1850 : 3700;
+  const start = new Date(Date.now() - days*864e5).toISOString().slice(0,10);
+  const end = new Date(Date.now() - 16*60e3).toISOString();
+  let raw, feed = 'sip';
+  try{ raw = await alpacaBarsAll(sym, start, 'sip', end); }
+  catch(e){
+    if(!e.plan && (e.status === 401 || e.status === 403)) throw e;   // claves malas: no tiene sentido reintentar
+    feed = 'iex'; raw = await alpacaBarsAll(sym, start, 'iex');
+  }
+  const bars = raw.map(b => { const t = Math.floor(Date.parse(b.t)/1000); return {t, d:etDate(t), o:b.o, h:b.h, l:b.l, c:b.c, v:b.v || 0, adj:b.c}; })
+                  .filter(b => isNum(b.c) && isNum(b.o));
+  if(!bars.length) throw new Error('Alpaca no tiene histórico de ' + sym);
+  const last = bars[bars.length-1];
+  return {meta:{symbol:ticker, currency:'USD', exchangeName:'Alpaca', fullExchangeName:'Alpaca · histórico ' + feed.toUpperCase(),
+    regularMarketPrice:last.c, regularMarketVolume:last.v, regularMarketTime:last.t, alpacaFeed:feed}, bars, divs:[]};
+}
+async function loadLiveAlpaca(ticker){
+  const sym = alSymbol(ticker), c = alpacaCreds();
+  const j = await alpacaGet(`/v2/stocks/snapshots?symbols=${encodeURIComponent(sym)}&feed=${c ? c.feed : 'iex'}`, 12000);
+  const sn = (j.snapshots || j)[sym];
+  if(!sn) throw new Error('Alpaca no devolvió cotización de ' + sym);
+  const db = sn.dailyBar, tr = sn.latestTrade, q = sn.latestQuote;
+  const mid = q && q.bp > 0 && q.ap > 0 ? (q.bp + q.ap)/2 : null;
+  const price = tr && isNum(tr.p) ? tr.p : (mid != null ? mid : db && db.c);
+  if(!isNum(price)) throw new Error('cotización vacía');
+  const t = db ? Math.floor(Date.parse(db.t)/1000) : Math.floor(Date.now()/1000);
+  // La barra del día llega del feed IEX: su volumen es parcial y no debe pisar al consolidado.
+  const bar = {t, d:etDate(t), o: db ? db.o : price, h: Math.max(db ? db.h : price, price), l: Math.min(db ? db.l : price, price),
+               c: price, v: db ? db.v : 0, adj: price, partial:true};
+  const tt = tr && tr.t ? Math.floor(Date.parse(tr.t)/1000) : t;
+  return {meta:{symbol:ticker, regularMarketPrice:price, regularMarketTime:tt}, bars:[bar], divs:[]};
 }
 
 /* ---- Yahoo: fundamentales por series temporales -------------------------- */
@@ -1208,8 +1316,8 @@ async function loadTicker(sym){
     setLive('on', 'precio cargado');
     // segunda oleada: fundamentales, noticias, extras de Finnhub (no bloquean el gráfico)
     const jobs = [
-      loadFundamentals(sym).then(f => { S.data.fundRaw = f; }).catch(e => { if(!usingTD()) S.data.err.push('fundamentales: ' + e.message); }),
-      yahooSearch(sym, true).then(r => { S.data.search = r; }).catch(e => { if(!usingTD()) S.data.err.push('búsqueda: ' + e.message); }),
+      loadFundamentals(sym).then(f => { S.data.fundRaw = f; }).catch(e => { if(!usingTD() && !usingAlpaca()) S.data.err.push('fundamentales: ' + e.message); }),
+      yahooSearch(sym, true).then(r => { S.data.search = r; }).catch(e => { if(!usingTD() && !usingAlpaca()) S.data.err.push('búsqueda: ' + e.message); }),
       finnhubOk() ? loadFinnhubExtras(sym).then(x => { S.data.fh = x; }).catch(e => S.data.err.push('finnhub: ' + e.message)) : Promise.resolve()
     ];
     await Promise.all(jobs);
@@ -1224,7 +1332,11 @@ async function loadTicker(sym){
   }catch(e){
     if(seq !== loadSeq) return;
     setLive('off', 'error');
-    const ayuda = usingTD()
+    const ayuda = usingAlpaca()
+      ? (alpacaOk()
+          ? 'Abre el Monitor de Portafolio → Ajustes → Probar conexión: el diagnóstico te dirá si falla la clave, el REST o la red.'
+          : 'No hay claves de Alpaca guardadas en este navegador. Pégalas en el Monitor de Portafolio → Ajustes → Conexión con Alpaca y vuelve aquí.')
+      : usingTD()
       ? 'Comprueba la clave de Twelve Data en Ajustes ⚙ y que no hayas superado las 8 peticiones por minuto del plan gratuito.'
       : 'Los proxies públicos de Yahoo están caídos o saturados. Abre Ajustes ⚙ y prueba: 1) el botón «Probar proxies», 2) cambiar la fuente a Twelve Data (clave gratuita, sin proxy), o 3) añadir tu propio proxy.';
     $('#chartmsg').innerHTML = '<div style="max-width:560px"><b>No se pudo cargar ' + esc(sym) + '</b><br>' + esc(e.message) + '<br><br>' + esc(ayuda) + '</div>';
@@ -1365,7 +1477,8 @@ function renderPanel(){
 
 function renderFooter(){
   const F = S.data && S.data.fund, sinFund = !F || !F.qEps.length;
-  const precio = usingTD() ? 'Precios: Twelve Data (directo, sin proxy).' : 'Precios: Yahoo Finance (retraso de hasta 15 min según el mercado).';
+  const precio = usingAlpaca() ? `Precios: Alpaca (directo, sin proxy · histórico ${(S.data && S.data.meta && S.data.meta.alpacaFeed || 'SIP').toUpperCase()}, en vivo ${(alpacaCreds() || {feed:'iex'}).feed.toUpperCase()}).`
+    : usingTD() ? 'Precios: Twelve Data (directo, sin proxy).' : 'Precios: Yahoo Finance (retraso de hasta 15 min según el mercado).';
   const fund = sinFund
     ? '<span style="color:#b33">Fundamentales no disponibles: Yahoo no respondió. Los ratings de beneficios, el P/E y la tabla trimestral quedan en N/A hasta que un proxy funcione (Ajustes ⚙ → Probar proxies).</span>'
     : 'Fundamentales: Yahoo Finance.';
@@ -1469,7 +1582,12 @@ async function refreshLive(){
     const d = S.data.daily;
     for(const b of r.bars){
       const last = d[d.length-1];
-      if(b.d.getTime() === last.d.getTime()) d[d.length-1] = b;
+      if(b.d.getTime() === last.d.getTime()){
+        // Una barra parcial (feed IEX) solo puede ampliar el rango del día, no encogerlo.
+        d[d.length-1] = b.partial
+          ? Object.assign({}, b, {o:last.o, h:Math.max(last.h, b.h), l:Math.min(last.l, b.l), v:Math.max(last.v, b.v)})
+          : b;
+      }
       else if(b.d > last.d) d.push(b);
     }
     S.data.meta = Object.assign({}, S.data.meta, r.meta);
@@ -1553,7 +1671,14 @@ function openSettings(){
 function onProviderChange(){
   const p = $('#setProvider').value;
   $('#tdBlock').classList.toggle('hidden', p !== 'twelvedata');
-  $('#provHelp').innerHTML = p === 'twelvedata'
+  $('#alBlock').classList.toggle('hidden', p !== 'alpaca');
+  const c = alpacaCreds();
+  $('#alStatus').innerHTML = c
+    ? `<b style="color:#1d7a3a">✓ Claves de Alpaca encontradas</b> en el Monitor (${esc(c.key.slice(0,4))}…, feed en vivo ${c.feed.toUpperCase()}). No hay que volver a pegarlas.`
+    : '<b style="color:#b33">No hay claves de Alpaca en este navegador.</b> Pégalas en el <a href="./index.html">Monitor de Portafolio</a> → Ajustes → Conexión con Alpaca, pulsa «Probar conexión» y vuelve aquí.';
+  $('#provHelp').innerHTML = p === 'alpaca'
+    ? 'El navegador llama a Alpaca directamente, sin proxy. El histórico usa el feed consolidado (volumen real de todo el mercado); el precio en vivo, el feed de tu plan. Los fundamentales (EPS, ventas, P/E) siguen viniendo de Yahoo y dependen de un proxy o de Finnhub.'
+    : p === 'twelvedata'
     ? 'El navegador llama a Twelve Data directamente, sin intermediarios: es la opción estable cuando los proxies públicos fallan. Actualización mínima de 30 segundos por el límite del plan gratuito.'
     : 'Los mismos datos que MarketSurge lee de la bolsa, gratis y sin registro, pero el navegador no puede llamar a Yahoo directamente y depende de proxies públicos que a veces se saturan.';
 }
@@ -1562,6 +1687,7 @@ function readProxyList(){ return $$('#proxyList input').map(i => i.value.trim())
 async function saveSettings(){
   const s = S.settings;
   s.provider = $('#setProvider').value; s.tdKey = $('#setTdKey').value.trim(); s.ownProxy = $('#setOwnProxy').value.trim();
+  if(s.provider === 'alpaca' && !alpacaOk()){ toast('Primero guarda tus claves de Alpaca en el Monitor de Portafolio → Ajustes', 'err', 6000); return; }
   if(s.provider === 'twelvedata' && !s.tdKey){ toast('Pega la clave de Twelve Data o vuelve a elegir Yahoo Finance', 'err', 5000); return; }
   s.refresh = clamp(+$('#setRefresh').value || 15, 5, 600); s.bench = $('#setBench').value; s.finnhub = $('#setFinnhub').value.trim(); s.notify = $('#setNotify').checked; s.prePost = $('#setPrePost').checked;
   s.proxies = readProxyList(); if(!s.proxies.length) s.proxies = [...DEFAULT_PROXIES];
@@ -1582,6 +1708,13 @@ function renderPlan(){
 
 /* ---- arranque y eventos -------------------------------------------------- */
 function init(){
+  // Una sola vez: si el Monitor ya tiene claves de Alpaca y aquí la fuente es Yahoo
+  // (que depende de proxies públicos), se pasa a Alpaca. Si luego eliges otra fuente
+  // a mano en Ajustes, se respeta.
+  if(!S.settings.alpacaAuto && S.settings.provider !== 'twelvedata' && alpacaOk()){
+    S.settings.provider = 'alpaca'; S.settings.alpacaAuto = true; LS.set('settings', S.settings);
+    setTimeout(() => toast('Usando tus claves de Alpaca del Monitor: datos directos, sin proxy', 'ok', 5000), 400);
+  }
   renderListSelects(); renderAlerts();
   $$('#tfSeg button').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf));
   $('#rangeSel').value = String(S.bars); if($('#rangeSel').value !== String(S.bars)) $('#rangeSel').value = '250';

@@ -4,7 +4,7 @@
 
    Al cambiar este número se descarta toda la caché anterior. Súbelo cuando
    publiques una versión nueva y quieras forzar el refresco en los equipos. */
-const CACHE = 'monitor-nyse-v2';
+const CACHE = 'monitor-nyse-v3';
 
 /* Solo lo imprescindible. Los iconos y el manifiesto entran solos en la caché
    la primera vez que el navegador los pide: incluirlos aquí haría que un
