@@ -200,6 +200,7 @@ input.readonly{opacity:.85;cursor:pointer}
 @media (max-width:900px){.pf-form{grid-template-columns:repeat(3,minmax(0,1fr))}.pf-form .note-f{grid-column:span 2}.pf-bar .search{margin-left:0;width:100%}}
 
 /* ---------- Responsive ---------- */
+@media (max-width:1480px){.brand small,.group-label{display:none}}
 @media (max-width:1180px){
   .grid[data-n="3"]{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr)}
   .grid[data-n="6"]{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(3,1fr)}
@@ -220,6 +221,10 @@ input.readonly{opacity:.85;cursor:pointer}
 <body>
 <div class="app">
   <header class="topbar">
+    <a class="btn back-btn" href="./index.html" title="Volver al Monitor de Portafolio" style="text-decoration:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      Monitor
+    </a>
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 8-9"/><path d="M14 6h6v6"/></svg>
