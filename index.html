@@ -468,6 +468,7 @@ footer.foot{
       </button>
       <button class="btn" id="btnRefresh" title="Actualizar ahora (R)">↻ Actualizar</button>
       <a class="btn" href="./marketsurge.html" title="Gráfico estilo MarketSurge con ratings, línea RS y fundamentales" style="text-decoration:none">📈 MarketSurge</a>
+      <a class="btn" href="./graficos.html" title="Hasta 6 gráficos históricos con precios en tiempo real de Alpaca" style="text-decoration:none">📊 Gráficos</a>
       <button class="btn icon ghost" id="btnTheme" title="Cambiar tema">◐</button>
     </div>
   </div>
@@ -764,7 +765,7 @@ footer.foot{
           <span class="help" id="keyHint"></span></div>
         <div class="field"><label for="setAlpacaSecret">API Secret Key</label>
           <div style="display:flex;gap:6px">
-            <input type="password" id="setAlpacaSecret" autocomplete="off" spellcheck="false" placeholder="••••••••">
+            <input type="password" id="setAlpacaSecret" autocomplete="off" spellcheck="false" placeholder="••••••••" style="flex:1;min-width:0">
             <button class="iconbtn" id="btnRevealSecret" title="Mostrar u ocultar" style="width:34px;flex:0 0 auto">👁</button>
           </div>
           <span class="help" id="secretHint"></span></div>
@@ -967,7 +968,7 @@ const ICON = {
 /* ----------------------------- estado ----------------------------- */
 /* Súbela al publicar cambios: aparece en el pie y sirve para comprobar de
    un vistazo si el navegador está sirviendo una copia vieja. */
-const APP_VERSION = '2026.09.23-terminal';
+const APP_VERSION = '2026.09.24-graficos';
 
 const STORE_KEY = 'ggm.monitor.nyse.v1';
 
