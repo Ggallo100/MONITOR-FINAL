@@ -750,6 +750,123 @@ function openFinnhub() {
   ws.onclose = () => { if (rt.ws === ws && settings.rt === 'finnhub') { setRtStatus('reconnecting'); setTimeout(() => rt.ws === ws && openFinnhub(), 5000); } };
   ws.onerror = () => setRtStatus('error');
 }
+/* ---------- Conexión con Alpaca compartida entre pestañas ----------
+   El plan gratuito de Alpaca admite UNA conexión en vivo por cuenta. El Monitor
+   y Gráficos se publican en el mismo sitio, así que la comparten en vez de
+   disputársela: la primera pestaña que la pide es la «líder», abre el WebSocket
+   real y reenvía los mensajes a las demás por BroadcastChannel. Si la líder se
+   cierra o cambia de página, otra toma el relevo sin que las demás lo noten.
+   Además, al pasar de una página a otra Alpaca tarda unos segundos en liberar
+   la conexión anterior y responde 406: eso se reintenta en silencio.
+   El objeto devuelto se usa exactamente igual que un WebSocket. */
+function alpacaSocket(url, key, secret) {
+  if (!navigator.locks || typeof BroadcastChannel !== 'function') return new WebSocket(url);
+  let h = 5381; for (const ch of url + '|' + key + '|' + secret) h = (h * 33 ^ ch.charCodeAt(0)) >>> 0;
+  return new AlpacaShared(url, 'alpaca-ws-' + h.toString(36));
+}
+class AlpacaShared {
+  constructor(url, name) {
+    Object.assign(this, { url, name, readyState: 0, id: Math.random().toString(36).slice(2), auth: null, authed: false,
+      leader: false, live: false, leaderLive: false, dead: false, ws: null, tries: 0, quiet: false, peers: new Map(),
+      subs: { trades: new Set(), quotes: new Set(), bars: new Set() }, onopen: null, onmessage: null, onclose: null, onerror: null });
+    this.bc = new BroadcastChannel(name);
+    this.bc.onmessage = e => this._peer(e.data);
+    this.abort = new AbortController();
+    navigator.locks.request(name, { signal: this.abort.signal },
+      () => this.dead ? null : new Promise(res => { this.release = res; this._lead(); })).catch(() => {});
+    AlpacaShared.all.add(this);
+    this.hb = setInterval(() => this._postSubs(), 15000);
+    setTimeout(() => { if (this.dead) return; this.readyState = 1; this.onopen && this.onopen({}); this._postSubs(); }, 0);
+  }
+  send(raw) {
+    const m = JSON.parse(raw);
+    if (m.action === 'auth') { this.auth = raw; if (this.leader) this._realAuth(); else if (this.leaderLive) this._authOk(); return; }
+    if (m.action !== 'subscribe' && m.action !== 'unsubscribe') return;
+    for (const ch of ['trades', 'quotes', 'bars']) for (const s of m[ch] || []) this.subs[ch][m.action === 'subscribe' ? 'add' : 'delete'](s);
+    if (this.leader) this._resub(); else this._postSubs();
+  }
+  close() { if (this.dead) return; if (this.leader) this._post({ type: 'handover' }); this._die(); }
+
+  _post(m) { try { this.bc.postMessage(m); } catch {} }
+  _postSubs() { this._post({ type: 'subs', id: this.id, subs: { trades: [...this.subs.trades], quotes: [...this.subs.quotes], bars: [...this.subs.bars] } }); }
+  _emit(msgs) { if (msgs.length && this.onmessage) this.onmessage({ data: JSON.stringify(msgs) }); }
+  _mine(msgs) { return msgs.filter(m => this.subs[{ t: 'trades', q: 'quotes', b: 'bars' }[m.T]]?.has(m.S)); }
+  _authOk() { if (this.authed || !this.auth || this.dead) return; this.authed = true; this._emit([{ T: 'success', msg: 'authenticated' }]); }
+  _peer(d) {
+    if (this.dead || !d) return;
+    if (this.leader) {
+      if (d.type === 'subs') { this.peers.set(d.id, { subs: d.subs, t: Date.now() }); this._resub(); if (this.live) this._post({ type: 'live' }); }
+      else if (d.type === 'bye') { this.peers.delete(d.id); this._resub(); }
+      return;
+    }
+    if (d.type === 'live') { this.leaderLive = true; this._authOk(); }
+    else if (d.type === 'data') this._emit(this._mine(d.msgs));
+    else if (d.type === 'err') this._emit([d.msg]);
+    else if (d.type === 'handover') this.leaderLive = false;       // otra pestaña tomará el relevo
+    else if (d.type === 'down') this._die();                        // fallo real: cada página aplica su reintento
+    else if (d.type === 'hello') this._postSubs();
+  }
+  _lead() { this.leader = true; this.tries = 0; this._post({ type: 'hello' }); this._open(); }
+  _open() {
+    if (this.dead) return;
+    let ws;
+    try { ws = new WebSocket(this.url); } catch { this._post({ type: 'down' }); this._die(); return; }
+    this.ws = ws; this.live = false; this.wsOpen = false;
+    ws.onopen = () => { this.wsOpen = true; this._realAuth(); };
+    ws.onmessage = ev => {
+      if (this.ws !== ws) return;
+      let msgs; try { msgs = [].concat(JSON.parse(ev.data)); } catch { return; }
+      const data = [];
+      for (const m of msgs) {
+        if (m.T === 't' || m.T === 'q' || m.T === 'b') data.push(m);
+        else if (m.T === 'success' && m.msg === 'authenticated') {
+          this.live = true; this.tries = 0; this.cur = { trades: new Set(), quotes: new Set(), bars: new Set() };
+          this._resub(); this._post({ type: 'live' }); this._authOk();
+        } else if (m.T === 'error') {
+          // 406: la conexión anterior aún no se ha liberado. Se reintenta en silencio unos segundos.
+          if (m.code === 406 && ++this.tries <= 8) { this.quiet = true; try { ws.close(); } catch {} return; }
+          this._emit([m]); this._post({ type: 'err', msg: m });
+        }
+      }
+      if (data.length) { this._emit(this._mine(data)); this._post({ type: 'data', msgs: data }); }
+    };
+    ws.onclose = () => {
+      if (this.ws !== ws || this.dead) return;
+      this.ws = null; this.live = false;
+      if (this.quiet) { this.quiet = false; setTimeout(() => this._open(), 1500); return; }
+      this._post({ type: 'down' }); this._die();
+    };
+    ws.onerror = () => {};
+  }
+  _realAuth() { if (this.ws && this.wsOpen && this.auth) this.ws.send(this.auth); }
+  _resub() {
+    if (!this.live || !this.ws) return;
+    const now = Date.now(), want = { trades: new Set(this.subs.trades), quotes: new Set(this.subs.quotes), bars: new Set(this.subs.bars) };
+    for (const [id, p] of this.peers) {
+      if (now - p.t > 40000) { this.peers.delete(id); continue; }                   // pestaña que desapareció sin avisar
+      for (const ch in want) (p.subs[ch] || []).forEach(s => want[ch].add(s));
+    }
+    const add = {}, drop = {};
+    for (const ch in want) { add[ch] = [...want[ch]].filter(s => !this.cur[ch].has(s)); drop[ch] = [...this.cur[ch]].filter(s => !want[ch].has(s)); }
+    if (Object.values(drop).some(a => a.length)) this.ws.send(JSON.stringify({ action: 'unsubscribe', ...drop }));
+    if (Object.values(add).some(a => a.length)) this.ws.send(JSON.stringify({ action: 'subscribe', ...add }));
+    this.cur = want;
+  }
+  _die() {
+    if (this.dead) return;
+    this.dead = true; this.readyState = 3; clearInterval(this.hb);
+    if (this.ws) { const w = this.ws; this.ws = null; try { w.close(1000); } catch {} }
+    this._post({ type: 'bye', id: this.id });
+    this.abort.abort(); this.release && this.release();
+    try { this.bc.close(); } catch {}
+    AlpacaShared.all.delete(this);
+    setTimeout(() => this.onclose && this.onclose({}), 0);
+  }
+}
+AlpacaShared.all = new Set();
+// Al salir de la página se cierra ya, para que Alpaca libere la conexión cuanto antes.
+addEventListener('pagehide', () => AlpacaShared.all.forEach(s => s.close()));
+
 /* WebSocket de Alpaca: no está sujeto a CORS, así que el navegador se conecta
    directamente al mercado. El plan gratuito admite UNA conexión simultánea: si
    el Monitor u otra pestaña ya la usa, Alpaca responde 406. */
@@ -759,7 +876,7 @@ function openAlpaca() {
   try { rt.ws?.close(); } catch {}
   rt.wsSubs.clear(); rt.authed = false; rt.fatal = null;
   let ws;
-  try { ws = new WebSocket(`wss://stream.data.alpaca.markets/v2/${c.feed}`); } catch { setRtStatus('error'); return; }
+  try { ws = alpacaSocket(`wss://stream.data.alpaca.markets/v2/${c.feed}`, c.key, c.secret); } catch { setRtStatus('error'); return; }
   rt.ws = ws; setRtStatus('connecting');
   ws.onopen = () => ws.send(JSON.stringify({ action: 'auth', key: c.key, secret: c.secret }));
   ws.onmessage = ev => {
@@ -833,7 +950,12 @@ function startRealtime() {
   clearInterval(rt.pollTimer); clearInterval(rt.demoTimer);
   if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch {} }
   if (settings.rt === 'demo') { rt.demoTimer = setInterval(demoTick, 1000); setRtStatus('sim'); }
-  else if (settings.rt === 'alpaca') { rt.fatal = null; rt.retries = 0; if (!alpacaCreds()) { setRtStatus('nokey'); return; } openAlpaca(); }
+  else if (settings.rt === 'alpaca') {
+    rt.fatal = null; rt.retries = 0; if (!alpacaCreds()) { setRtStatus('nokey'); return; } openAlpaca();
+    // Mientras el stream no esté en vivo, los precios siguen llegando por consulta.
+    const poll = () => { if (settings.rt === 'alpaca' && rt.status !== 'live') alpacaSnapshot(wantedTickers()); };
+    rt.pollTimer = setInterval(poll, 15000); setTimeout(poll, 4000);
+  }
   else if (settings.rt === 'finnhub') { if (!settings.fhKey) { setRtStatus('nokey'); return; } openFinnhub(); }
   else if (settings.rt === 'twelve') { if (!settings.tdKey) { setRtStatus('nokey'); return; } pollTwelve(); rt.pollTimer = setInterval(pollTwelve, settings.poll * 1000); }
   else setRtStatus('off');
@@ -845,7 +967,7 @@ function setRtStatus(s) {
                 : settings.rt === 'finnhub' ? 'Finnhub en vivo' : `Twelve Data cada ${settings.poll}s`;
   const live = { sim: 'ticks simulados', live: liveTxt,
     connecting: 'conectando…', reconnecting: 'reconectando…', error: 'error de conexión', nokey: 'falta clave API', off: 'desactivado',
-    dup: 'otra pestaña o el Monitor ya usa la conexión de Alpaca (406); reintentando', badkey: 'Alpaca rechazó las claves',
+    dup: 'otro equipo o programa usa tu conexión de Alpaca (406); precios cada 15 s mientras se reintenta', badkey: 'Alpaca rechazó las claves',
     plan: 'tu plan de Alpaca no incluye ese feed: elige IEX' }[s];
   $('#srcTxt').textContent = `Histórico: ${src} · Tiempo real: ${live}`;
   panels.forEach(p => p.setLive(s === 'sim' || s === 'live'));
