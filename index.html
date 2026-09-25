@@ -61,6 +61,9 @@ a{color:var(--accent)}
 .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)} .muted{color:var(--fg-2)}
 .dim{color:var(--fg-3)}
 .hidden{display:none !important}
+.syncpill{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--up);white-space:nowrap}
+.syncpill.busy{color:var(--fg-3)}
+.syncpill.err{color:var(--down);border-color:var(--down)}
 
 /* ============================================================
    TOP BAR
@@ -454,6 +457,8 @@ footer.foot{
       <span class="dot closed" id="mktDot"></span>
       <span><span class="t" id="mktText">—</span> <span class="c" id="mktCountdown"></span></span>
     </div>
+
+    <span class="syncpill hidden" id="syncPill">⇅ Sync</span>
 
     <div class="mkt hidden" id="streamPill" title="Estado de la conexión en tiempo real">
       <span class="dot closed" id="streamDot"></span>
@@ -893,7 +898,49 @@ footer.foot{
     </div>
     <div class="note" style="margin-top:12px">
       Todo se guarda en el <code>localStorage</code> de este navegador: no se envía nada a ningún servidor
-      salvo las consultas de cotización al proveedor elegido. Si cambias de equipo, usa la copia JSON.
+      salvo las consultas de cotización al proveedor elegido y, si la activas, la copia cifrada de la
+      sincronización entre dispositivos.
+    </div>
+  </div>
+
+  <div class="card" id="syncCard">
+    <div class="card-h"><h2>Sincronización entre dispositivos</h2><span class="hint" id="syncState">desactivada</span></div>
+    <div id="syncOff">
+      <div class="note">
+        Mantiene iguales tus <b>posiciones, operaciones y ajustes</b> (incluidas las claves de Alpaca) en la laptop,
+        el celular y cualquier otro equipo. Se guardan <b>cifrados con tu contraseña</b> en un Gist secreto de tu
+        propia cuenta de GitHub: no interviene ningún servidor de terceros y GitHub no puede leerlos.
+      </div>
+      <ol style="margin:12px 0 0 18px;line-height:1.6;font-size:13px">
+        <li>Pulsa <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Monitor%20NYSE%20sync" target="_blank" rel="noopener"><b>Crear token en GitHub</b></a>.
+          Inicia sesión si te lo pide. En «Expiration» elige <b>No expiration</b>, deja marcada solo la casilla <b>gist</b>
+          y pulsa <b>Generate token</b> al pie. Copia el código que empieza por <code>ghp_</code>.</li>
+        <li>Pégalo abajo, elige una <b>contraseña de sincronización</b> (la misma para todos tus equipos) y pulsa <b>Activar</b>.</li>
+        <li>Pulsa <b>Enlace para otro dispositivo</b>, envíatelo (WhatsApp o correo a ti mismo), ábrelo en el celular y escribe la contraseña.</li>
+      </ol>
+      <div class="grid-form" style="margin-top:12px">
+        <div class="field"><label for="syncToken">Token de GitHub</label>
+          <input type="password" id="syncToken" autocomplete="off" spellcheck="false" placeholder="ghp_…" style="min-width:0"></div>
+        <div class="field"><label for="syncPass">Contraseña de sincronización</label>
+          <input type="password" id="syncPass" autocomplete="new-password" placeholder="mínimo 8 caracteres" style="min-width:0">
+          <span class="help">Si ya activaste la sincronización en otro equipo, usa la misma contraseña.</span></div>
+      </div>
+      <div class="rowflex" style="margin-top:10px"><button class="btn primary" id="btnSyncOn">Activar sincronización</button></div>
+      <div id="syncMsg" class="note hidden" style="margin-top:10px"></div>
+    </div>
+    <div id="syncOn" class="hidden">
+      <div class="note" id="syncDetail">—</div>
+      <div class="rowflex" style="margin-top:10px">
+        <button class="btn" id="btnSyncNow">⇅ Sincronizar ahora</button>
+        <button class="btn" id="btnSyncLink">Enlace para otro dispositivo</button>
+        <button class="btn ghost" id="btnSyncOff">Desactivar en este equipo</button>
+      </div>
+      <div id="syncLinkBox" class="hidden" style="margin-top:10px">
+        <div class="rowflex"><input type="text" id="syncLinkTxt" readonly style="flex:1;min-width:0">
+          <button class="btn sm" id="btnSyncCopy">Copiar</button></div>
+        <span class="help" style="display:block;margin-top:6px;font-size:11px;color:var(--fg-3)">Ábrelo en el celular u otro equipo y escribe tu contraseña.
+          El enlace da acceso a tu almacén cifrado: envíatelo solo a ti y bórralo del chat después.</span>
+      </div>
     </div>
   </div>
 
@@ -967,7 +1014,7 @@ const ICON = {
 /* ----------------------------- estado ----------------------------- */
 /* Súbela al publicar cambios: aparece en el pie y sirve para comprobar de
    un vistazo si el navegador está sirviendo una copia vieja. */
-const APP_VERSION = '2026.09.25-sin-marketsurge';
+const APP_VERSION = '2026.09.25-sync';
 
 const STORE_KEY = 'ggm.monitor.nyse.v1';
 
@@ -1037,7 +1084,7 @@ let saveTimer=null;
 function save(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); syncSoon(); }
     catch(e){
       if(S.ticks.length>200){ S.ticks = S.ticks.slice(-200);
         try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); toast('warn','Almacenamiento lleno','Se recortó el log de ticks para poder guardar.'); }catch(_){}
@@ -3823,8 +3870,9 @@ function wire(){
   $('#btnBackup').onclick = backup;
   $('#btnRestore').onclick = restore;
   $('#btnWipe').onclick = () => confirmModal('Borrar todos los datos',
-    'Se eliminarán posiciones, operaciones, ticks y ajustes de este navegador. La acción no se puede deshacer.',
-    ()=>{ localStorage.removeItem(STORE_KEY); S = structuredClone(DEFAULTS);
+    'Se eliminarán posiciones, operaciones, ticks y ajustes de este navegador. La acción no se puede deshacer. '
+    + 'Si la sincronización está activa, se desactiva antes en este equipo para no borrar los datos de tus otros dispositivos.',
+    ()=>{ syncDisable(); localStorage.removeItem(STORE_KEY); S = structuredClone(DEFAULTS);
           quotes.clear(); indi.clear(); alarmState.clear();
           applySettingsToUI(); applyTheme(); renderAll(); toast('warn','Datos borrados'); }, 'Borrar todo');
 
@@ -3857,6 +3905,314 @@ function selectTab(name){
 }
 
 /* ==================================================================
+   SINCRONIZACIÓN ENTRE DISPOSITIVOS
+   Cada navegador guarda sus datos en localStorage. Para ver lo mismo en la
+   laptop, el celular o cualquier otro equipo se guarda una copia CIFRADA en un
+   Gist secreto de tu propia cuenta de GitHub: no interviene ningún servidor de
+   terceros y GitHub solo ve datos ilegibles.
+   · Cifrado AES-GCM de 256 bits con una clave derivada de tu contraseña de
+     sincronización (PBKDF2-SHA256, 250 000 iteraciones). La contraseña nunca
+     sale del equipo.
+   · Fusión de tres vías: cada equipo compara su estado y el remoto con la
+     última versión que sincronizó (la «base»), fila por fila. Los cambios de
+     ambos lados se conservan; si los dos editan la misma fila gana el equipo
+     que sincroniza, y una edición nunca se pierde por un borrado del otro lado.
+   · Se sincronizan posiciones, operaciones y ajustes (incluidas las claves de
+     Alpaca). El log de ticks es propio de cada equipo y no se sube.
+   ================================================================== */
+const SYNC_CFG_KEY  = 'ggm.monitor.sync.v1';
+const SYNC_BASE_KEY = 'ggm.monitor.sync.base.v1';
+const SYNC_FILE = 'monitor-nyse-sync.json';
+const SYNC_POLL_MS = 60000;
+const sync = {cfg:null, key:null, busy:false, again:false, soon:null, lastOk:0, lastErr:null, lastBy:null, lastAt:null};
+
+const b64e = buf => { const u = new Uint8Array(buf); let s = ''; for(let i=0;i<u.length;i+=0x8000) s += String.fromCharCode(...u.subarray(i, i+0x8000)); return btoa(s); };
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+/** JSON con las claves ordenadas: dos objetos iguales dan siempre el mismo texto. */
+const stable = v => JSON.stringify(v, (k, x) => x && typeof x==='object' && !Array.isArray(x)
+  ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x) ?? 'null';
+
+function syncLoadCfg(){ try{ return JSON.parse(localStorage.getItem(SYNC_CFG_KEY) || 'null'); }catch(e){ return null; } }
+function syncSaveCfg(){ try{ sync.cfg ? localStorage.setItem(SYNC_CFG_KEY, JSON.stringify(sync.cfg)) : localStorage.removeItem(SYNC_CFG_KEY); }catch(e){} }
+function syncLoadBase(){ try{ return JSON.parse(localStorage.getItem(SYNC_BASE_KEY) || 'null'); }catch(e){ return null; } }
+function syncSaveBase(b){ try{ b ? localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(b)) : localStorage.removeItem(SYNC_BASE_KEY); }catch(e){} }
+function syncable(){ return {settings:S.settings, positions:S.positions, ledger:S.ledger}; }
+function deviceLabel(){
+  const u = navigator.userAgent;
+  return /Android/i.test(u) ? 'Android' : /iPhone|iPad/i.test(u) ? 'iPhone/iPad' : /Windows/i.test(u) ? 'Windows'
+       : /Macintosh/i.test(u) ? 'Mac' : /Linux/i.test(u) ? 'Linux' : 'otro equipo';
+}
+
+/* ---------- cifrado ---------- */
+async function syncDeriveKey(pass, salt){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:250000, hash:'SHA-256'}, base,
+    {name:'AES-GCM', length:256}, true, ['encrypt','decrypt']);
+}
+async function syncEncrypt(obj, key=sync.key){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(JSON.stringify(obj)));
+  return {iv:b64e(iv), ct:b64e(ct)};
+}
+async function syncDecrypt(env, key=sync.key){
+  let pt;
+  try{ pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64d(env.iv)}, key, b64d(env.ct)); }
+  catch(e){ throw new Error('la contraseña de sincronización no coincide con la de tus otros equipos'); }
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+/* ---------- GitHub Gist ---------- */
+async function gh(path, {method='GET', body, token=sync.cfg && sync.cfg.token}={}){
+  let r;
+  try{
+    r = await fetch('https://api.github.com' + path, {method, cache:'no-store', body: body ? JSON.stringify(body) : undefined,
+      headers:{Authorization:'Bearer ' + token, Accept:'application/vnd.github+json', ...(body ? {'Content-Type':'application/json'} : {})}});
+  }catch(e){ throw new Error('sin conexión con GitHub'); }
+  if(r.status === 401) throw new Error('GitHub rechazó el token (401): puede haber caducado o estar mal copiado');
+  if(r.status === 403 || r.status === 429) throw new Error(`GitHub limitó las peticiones (${r.status}); se reintentará`);
+  if(r.status === 404) throw new Error('no se encontró el almacén de sincronización (404): ¿el token tiene el permiso «gist»?');
+  if(!r.ok) throw new Error('GitHub respondió HTTP ' + r.status);
+  return r.status === 204 ? null : r.json();
+}
+async function syncFindGist(token){
+  for(let page=1; page<=5; page++){
+    const list = await gh(`/gists?per_page=100&page=${page}`, {token});
+    const hit = list.find(g => g.files && g.files[SYNC_FILE]);
+    if(hit) return hit.id;
+    if(list.length < 100) return null;
+  }
+  return null;
+}
+async function syncFetchEnv(gist=sync.cfg.gist, token){
+  const g = await gh(`/gists/${gist}`, {token});
+  const f = g.files && g.files[SYNC_FILE];
+  if(!f) throw new Error('el Gist no contiene los datos del Monitor');
+  const txt = f.truncated ? await (await fetch(f.raw_url, {cache:'no-store'})).text() : f.content;
+  const env = JSON.parse(txt);
+  if(!env || env.app !== 'monitor-nyse' || !env.salt) throw new Error('formato de sincronización no reconocido');
+  return env;
+}
+async function syncWriteEnv(obj, salt){
+  const e = await syncEncrypt(obj);
+  const env = {v:1, app:'monitor-nyse', salt, iv:e.iv, ct:e.ct, at:new Date().toISOString(), by:deviceLabel()};
+  await gh(`/gists/${sync.cfg.gist}`, {method:'PATCH', body:{files:{[SYNC_FILE]:{content:JSON.stringify(env)}}}});
+  sync.lastBy = env.by; sync.lastAt = env.at;
+}
+
+/* ---------- fusión de tres vías ---------- */
+function mergeList(base, local, remote, keyOf){
+  const idx = a => new Map((a || []).map(x => [x.id, x]));
+  const B = idx(base), L = idx(local), R = idx(remote), out = [], seen = new Set();
+  const pick = id => {
+    const sb = B.has(id) ? stable(B.get(id)) : null, sl = L.has(id) ? stable(L.get(id)) : null, sr = R.has(id) ? stable(R.get(id)) : null;
+    if(sl === sb) return R.get(id);           // aquí no cambió: manda el otro lado (incluidos sus borrados)
+    if(sr === sb) return L.get(id);           // allá no cambió: manda este equipo
+    return L.get(id) ?? R.get(id);            // cambió en ambos: gana este equipo; editar le gana a borrar
+  };
+  for(const x of [...(remote || []), ...(local || [])]){
+    if(seen.has(x.id)) continue; seen.add(x.id);
+    const v = pick(x.id); if(v) out.push(v);
+  }
+  if(!keyOf) return out;
+  const used = new Set();                     // misma acción u operación creada por separado en dos equipos
+  return out.filter(x => { const k = keyOf(x); if(k == null) return true; if(used.has(k)) return false; used.add(k); return true; });
+}
+function mergeSettings(base, local, remote){
+  if(!base) return {...local, ...remote};     // equipo que se une: adopta los ajustes de los demás
+  const out = {};
+  for(const k of new Set([...Object.keys(local), ...Object.keys(remote)])){
+    const sb = stable(base[k]), sl = stable(local[k]);
+    out[k] = sl === sb && k in remote ? remote[k] : local[k];
+  }
+  return out;
+}
+function syncMerge(base, local, remote){
+  return {
+    settings: mergeSettings(base && base.settings, local.settings || {}, remote.settings || {}),
+    positions: mergeList(base && base.positions, local.positions, remote.positions, p => p.ticker),
+    // Al unir un equipo nuevo se descartan operaciones idénticas (p. ej. las del Excel cargadas en los dos).
+    ledger: mergeList(base && base.ledger, local.ledger, remote.ledger, base ? null : o => [o.date, o.ticker, o.buy, o.sell].join('|'))
+  };
+}
+
+/** Aplica al equipo lo que llegó de los demás, sin tocar el log de ticks. */
+function syncApply(m){
+  const prev = S.settings, tickers = stable(S.positions.map(p => p.ticker).sort());
+  S.settings = {...DEFAULTS.settings, ...m.settings}; S.positions = m.positions; S.ledger = m.ledger;
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){}
+  applySettingsToUI(); applyTheme(); renderAll();
+  const streamKeys = ['provider','alpacaKey','alpacaSecret','alpacaFeed','alpacaStream'];
+  if(monitorOn && streamKeys.some(k => prev[k] !== S.settings[k])){ alpacaStreamStop(); alpacaStreamStart(); }
+  if(tickers !== stable(S.positions.map(p => p.ticker).sort())){ alpacaSubscribe(); refreshAll({silent:true}); }
+  toast('ok', 'Datos actualizados desde otro dispositivo', `${S.positions.length} posiciones · ${S.ledger.length} operaciones.`);
+}
+
+/* ---------- ciclo de sincronización ---------- */
+async function syncNow({manual=false, force=false}={}){
+  if(!sync.cfg || !sync.key) return;
+  if(sync.busy){ sync.again = true; return; }
+  if(!force && $('#modalHost') && $('#modalHost').innerHTML){ clearTimeout(sync.soon); sync.soon = setTimeout(syncNow, 4000); return; }  // no pisar un formulario abierto
+  sync.busy = true; syncPaint();
+  try{
+    const env = await syncFetchEnv();
+    const remote = await syncDecrypt(env);
+    // La foto local se toma aquí, justo antes de fusionar y sin esperas por medio,
+    // para no perder lo que se haya editado mientras llegaba la respuesta.
+    const local = JSON.parse(JSON.stringify(syncable())), base = syncLoadBase();
+    const merged = syncMerge(base, local, remote);
+    const changedHere = stable(merged) !== stable(local), changedThere = stable(merged) !== stable(remote);
+    if(changedHere) syncApply(merged);
+    syncSaveBase(merged);
+    if(changedThere) await syncWriteEnv(merged, env.salt);
+    else { sync.lastBy = env.by; sync.lastAt = env.at; }
+    sync.lastOk = Date.now(); sync.lastErr = null;
+    if(manual) toast('ok', 'Sincronizado', changedHere || changedThere ? 'Se intercambiaron cambios con tus otros equipos.' : 'Todo estaba al día.');
+  }catch(e){
+    sync.lastErr = e.message;
+    if(manual) toast('err', 'No se pudo sincronizar', e.message);
+  }finally{
+    sync.busy = false; syncPaint();
+    if(sync.again){ sync.again = false; syncNow(); }
+  }
+}
+/** Llamado tras cada guardado: sube los cambios a los pocos segundos. */
+function syncSoon(){
+  if(!sync.cfg || !sync.key) return;
+  clearTimeout(sync.soon);
+  sync.soon = setTimeout(() => { if(stable(syncable()) !== stable(syncLoadBase())) syncNow(); }, 2500);
+}
+
+async function syncActivate(token, pass){
+  if(!window.crypto || !crypto.subtle) throw new Error('este navegador no permite cifrar; abre el Monitor desde https://');
+  const gist = await syncFindGist(token);
+  if(gist) return syncJoin(token, gist, pass);
+  const salt = crypto.getRandomValues(new Uint8Array(16)), key = await syncDeriveKey(pass, salt);
+  const e = await syncEncrypt(syncable(), key);
+  const env = {v:1, app:'monitor-nyse', salt:b64e(salt), iv:e.iv, ct:e.ct, at:new Date().toISOString(), by:deviceLabel()};
+  const g = await gh('/gists', {method:'POST', token, body:{description:'Monitor NYSE · sincronización cifrada (no editar a mano)', public:false,
+    files:{[SYNC_FILE]:{content:JSON.stringify(env)}}}});
+  sync.cfg = {token, gist:g.id, k:b64e(await crypto.subtle.exportKey('raw', key))}; sync.key = key;
+  syncSaveCfg(); syncSaveBase(JSON.parse(JSON.stringify(syncable())));
+  sync.lastOk = Date.now(); sync.lastErr = null; sync.lastBy = env.by; sync.lastAt = env.at;
+  syncPaint();
+  return 'creado';
+}
+async function syncJoin(token, gist, pass){
+  if(!window.crypto || !crypto.subtle) throw new Error('este navegador no permite cifrar; abre el Monitor desde https://');
+  const env = await syncFetchEnv(gist, token);
+  const key = await syncDeriveKey(pass, b64d(env.salt));
+  await syncDecrypt(env, key);                                   // comprueba la contraseña antes de guardar nada
+  sync.cfg = {token, gist, k:b64e(await crypto.subtle.exportKey('raw', key))}; sync.key = key;
+  syncSaveCfg(); syncSaveBase(null);                             // sin base: se une conservando lo de ambos lados
+  await syncNow({force:true});
+  if(sync.lastErr) throw new Error(sync.lastErr);
+  return 'unido';
+}
+function syncDisable(){
+  clearTimeout(sync.soon); sync.cfg = null; sync.key = null; sync.lastErr = null;
+  syncSaveCfg(); syncSaveBase(null); syncPaint();
+}
+function syncLink(){
+  const data = btoa(JSON.stringify({t:sync.cfg.token, g:sync.cfg.gist})).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return location.origin + location.pathname + '#vincular=' + data;
+}
+
+/* ---------- interfaz ---------- */
+function syncAgo(ms){ const s = Math.round((Date.now() - ms)/1000); return s < 60 ? `hace ${s} s` : s < 3600 ? `hace ${Math.round(s/60)} min` : `hace ${Math.round(s/3600)} h`; }
+function syncPaint(){
+  const on = !!(sync.cfg && sync.key);
+  $('#syncOff') && $('#syncOff').classList.toggle('hidden', on);
+  $('#syncOn') && $('#syncOn').classList.toggle('hidden', !on);
+  const state = $('#syncState'), pill = $('#syncPill');
+  const txt = !on ? 'desactivada' : sync.busy ? 'sincronizando…' : sync.lastErr ? 'con error' : sync.lastOk ? 'al día' : 'pendiente';
+  if(state) state.textContent = txt;
+  if(pill){
+    pill.classList.toggle('hidden', !on);
+    pill.className = 'syncpill' + (on ? '' : ' hidden') + (sync.lastErr ? ' err' : sync.busy ? ' busy' : '');
+    pill.title = !on ? '' : sync.lastErr ? 'Sincronización: ' + sync.lastErr : 'Sincronizado entre dispositivos' + (sync.lastOk ? ' · ' + syncAgo(sync.lastOk) : '');
+  }
+  const det = $('#syncDetail');
+  if(det && on){
+    det.innerHTML = sync.lastErr
+      ? `<span style="color:var(--down)">⚠ ${esc(sync.lastErr)}</span>`
+      : `Última sincronización: <b>${sync.lastOk ? syncAgo(sync.lastOk) : '—'}</b>`
+        + (sync.lastAt ? ` · último cambio guardado desde <b>${esc(sync.lastBy || '?')}</b> el ${esc(new Date(sync.lastAt).toLocaleString('es-PE'))}` : '');
+  }
+}
+function syncWire(){
+  $('#btnSyncOn').onclick = async () => {
+    const token = $('#syncToken').value.trim(), pass = $('#syncPass').value;
+    const msg = $('#syncMsg'); const say = (t, bad) => { msg.innerHTML = t; msg.className = 'note' + (bad ? ' warn' : ''); };
+    if(!/^(ghp_|github_pat_|gho_)/.test(token)) return say('Pega el token de GitHub: empieza por <code>ghp_</code> o <code>github_pat_</code>.', true);
+    if(pass.length < 8) return say('Elige una contraseña de al menos 8 caracteres. Será la misma en todos tus equipos.', true);
+    const btn = $('#btnSyncOn'); btn.disabled = true; say('Conectando con GitHub…');
+    try{
+      const r = await syncActivate(token, pass);
+      $('#syncToken').value = ''; $('#syncPass').value = ''; msg.className = 'note hidden';
+      toast('ok', r === 'creado' ? 'Sincronización activada' : 'Equipo vinculado',
+        r === 'creado' ? 'Ahora abre «Enlace para otro dispositivo» y ábrelo en tu celular.' : 'Los datos de tus otros equipos ya están aquí.');
+    }catch(e){ say('No se pudo activar: ' + esc(e.message), true); }
+    finally{ btn.disabled = false; syncPaint(); }
+  };
+  $('#btnSyncNow').onclick = () => syncNow({manual:true});
+  $('#btnSyncLink').onclick = () => { $('#syncLinkBox').classList.remove('hidden'); $('#syncLinkTxt').value = syncLink(); $('#syncLinkTxt').select(); };
+  $('#btnSyncCopy').onclick = async () => {
+    try{ await navigator.clipboard.writeText($('#syncLinkTxt').value); toast('ok', 'Enlace copiado', 'Envíatelo solo a ti y ábrelo en el otro equipo.'); }
+    catch(e){ $('#syncLinkTxt').select(); toast('warn', 'Cópialo a mano', 'Selecciona el texto y pulsa Copiar.'); }
+  };
+  $('#btnSyncOff').onclick = () => confirmModal('Desactivar la sincronización',
+    'Este equipo dejará de sincronizarse. Sus datos se conservan, y los de tus otros equipos no se tocan.',
+    () => { syncDisable(); toast('warn', 'Sincronización desactivada en este equipo'); }, 'Desactivar');
+  setInterval(() => { if(!document.hidden) syncNow(); else syncPaint(); }, SYNC_POLL_MS);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) syncNow(); });
+  window.addEventListener('online', () => syncNow());
+}
+/** Enlace de vinculación: #vincular=… trae el token y el Gist; la contraseña se escribe aquí. */
+const SYNC_PENDING = 'ggm.monitor.sync.link';
+function syncHandleLink(){
+  const m = location.hash.match(/^#vincular=([\w-]+)$/);
+  let raw = m && m[1];
+  if(raw){
+    history.replaceState(null, '', location.pathname + location.search);   // el token no se queda en la barra ni en el historial
+    // La primera visita puede recargarse sola al activar la versión nueva de la app:
+    // el enlace se guarda unos minutos en esta pestaña para no perderlo.
+    try{ sessionStorage.setItem(SYNC_PENDING, JSON.stringify({raw, t:Date.now()})); }catch(e){}
+  } else {
+    try{ const p = JSON.parse(sessionStorage.getItem(SYNC_PENDING) || 'null'); if(p && Date.now() - p.t < 10*60e3) raw = p.raw; }catch(e){}
+  }
+  if(!raw) return;
+  let d; try{ d = JSON.parse(atob(raw.replace(/-/g,'+').replace(/_/g,'/'))); }catch(e){ try{ sessionStorage.removeItem(SYNC_PENDING); }catch(_){} toast('err', 'Enlace de vinculación dañado', 'Vuelve a copiarlo desde el otro equipo.'); return; }
+  if(!d || !d.t || !d.g) return;
+  const dlg = modal({title:'Vincular este dispositivo', okText:'Vincular',
+    bodyHtml:`<div class="note">Este enlace conecta este equipo con los datos de tu Monitor. Escribe la <b>contraseña de sincronización</b>
+      que elegiste al activarla. Las posiciones y operaciones que ya hubiera aquí se conservan y se suman.</div>
+      <div class="field" style="margin-top:12px"><label for="vPass">Contraseña de sincronización</label>
+        <input type="password" id="vPass" autocomplete="current-password"></div>
+      <div id="vErr" class="note warn hidden" style="margin-top:10px"></div>`,
+    onOk: host => {
+      const pass = $('#vPass', host).value, err = $('#vErr', host), ok = $('[data-ok]', host);
+      if(!pass){ err.textContent = 'Escribe la contraseña.'; err.classList.remove('hidden'); return false; }
+      ok.disabled = true; err.textContent = 'Comprobando…'; err.classList.remove('hidden');
+      syncJoin(d.t, d.g, pass).then(() => { try{ sessionStorage.removeItem(SYNC_PENDING); }catch(_){} dlg.close(); toast('ok', 'Dispositivo vinculado', 'Tus datos ya están sincronizados.'); syncPaint(); })
+        .catch(e => { err.textContent = 'No se pudo vincular: ' + e.message; ok.disabled = false; });
+      return false;
+    }});
+}
+async function syncInit(){
+  syncWire();
+  const cfg = syncLoadCfg();
+  if(cfg && cfg.token && cfg.gist && cfg.k && window.crypto && crypto.subtle){
+    try{
+      sync.cfg = cfg;
+      sync.key = await crypto.subtle.importKey('raw', b64d(cfg.k), 'AES-GCM', true, ['encrypt','decrypt']);
+    }catch(e){ sync.cfg = null; sync.key = null; }
+  }
+  syncPaint();
+  syncHandleLink();
+  if(sync.cfg) syncNow();
+}
+
+/* ==================================================================
    ARRANQUE
    ================================================================== */
 function init(){
@@ -3864,6 +4220,7 @@ function init(){
   applySettingsToUI();
   applyTheme();
   wire();
+  syncInit();
   renderAll();
   tickClocks();
   setInterval(tickClocks, 1000);
