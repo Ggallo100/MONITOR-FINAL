@@ -11,9 +11,9 @@ de la Ficha_Resumen y las 11 directrices automáticas de la DPDI. Se puede empaq
 | Archivo | Contenido |
 |---|---|
 | `database.py` | Esquema SQLite (unidades y techos, parámetros, catálogo NIIF, partidas GG, catálogos estratégicos, costos de referencia, plantilla de funcionamiento, maestros/detalles de las 5 clases de actividad, bitácora) y CRUD genérico. |
-| `catalogs_seed.py` | Catálogos oficiales embebidos: 296 cuentas NIIF (secciones I, J y CAPEX + índice de códigos), 98 partidas GG, ejes EJ-01…EJ-09, OE/AE/OBJ, orígenes, prioridades, sustentos, categorías OO-01…OO-11, tipos de actividad propia e inversión, 9 + 28 categorías de la Ficha_Resumen y plantilla base de funcionamiento. |
+| `catalogs_seed.py` | Catálogos oficiales embebidos: base consolidada de 296 cuentas NIIF con sus 99 Partidas GG y descripciones, ejes EJ-01…EJ-09, OE y objetivos anuales POA (vinculados a eje y OE), orígenes, prioridades, sustentos, categorías OO-01…OO-11, tipos de actividad propia e inversión, 9 + 28 categorías de la Ficha_Resumen y plantilla base de funcionamiento. Incluye la migración automática de bases de versiones anteriores. |
 | `controllers.py` | Reglas de negocio: cálculos por fila, generador de códigos, «Correr Actividades de Funcionamiento», Ficha_Resumen (12 secciones), 11 directrices, BD NIIF mensualizada, importador de fichas y parámetros, carga masiva NIIF (Pandas). |
-| `exporter.py` | Libro oficial `.xlsx` (16 pestañas con fórmulas vivas, listas desplegables, nombres definidos y formato condicional) + `BD_CONSOLIDADA_NIIF`; BD consolidada multiunidad (`.xlsx` + `.csv` + pivot mensual); PDF de la Ficha Resumen con bloque de firmas. |
+| `exporter.py` | Libro oficial `.xlsx` (16 pestañas con fórmulas vivas, listas desplegables —incluida la dependiente Eje → Objetivo anual—, nombres definidos y formato condicional) + `BD_CONSOLIDADA_NIIF`; BD consolidada multiunidad (`.xlsx` + `.csv` + pivot mensual); PDF de la Ficha Resumen con bloque de firmas; **plantilla descargable de Parámetros y Catálogos**. |
 | `main_app.py` | Interfaz CustomTkinter (login por rol y pestañas 0–7). |
 | `build_exe.bat` | Crea el entorno, ejecuta las pruebas y genera `dist\Sistema_POA_DPDI.exe`. |
 | `tests/test_core.py` | Pruebas del núcleo (cálculos, directrices, códigos, plantilla, exportar→importar ida y vuelta, PDF). |
@@ -32,6 +32,39 @@ La base se crea al primer arranque en `sistema_poa_dpdi/data/` (en el `.exe`: `%
 * **Responsable de Unidad Orgánica**: elige su unidad y formula su POA (pestañas 0 y 2–7).
 * **Administrador DPDI**: clave inicial `DPDI` (cámbiela en *Parámetros → Datos generales*). Acceso total al mantenedor
   de parámetros, techos, cuentas NIIF, catálogos, carga masiva y cambio de unidad.
+
+## Plantilla de Parámetros y Catálogos (actualización masiva)
+
+En *1. Parámetros y catálogos NIIF* (rol Administrador DPDI):
+
+1. **⬇ Descargar plantilla de Parámetros y Catálogos (.xlsx)**: genera un Excel con los valores vigentes en las hojas
+   `Datos_Generales`, `Unidades_Techos`, `Cuentas_NIIF_Partidas_GG`, `Catalogos_Estrategicos`, `Costos_Referencia`,
+   `Plantilla_Funcionamiento` (más `Instrucciones` y `Listas` para las listas desplegables).
+2. Edite o agregue filas (amarillo = editable; gris = calculado). La columna **ID** identifica cada registro: déjela
+   vacía para crear uno nuevo.
+3. **⬆ Importar plantilla de Parámetros y Catálogos (.xlsx)**: actualiza o agrega registros (no elimina; para retirar
+   una cuenta use `Activo = No`). Volver a importar el mismo archivo no duplica registros.
+
+## Alineamiento de las iniciativas: Eje → Objetivo anual del POA → OE del PEI
+
+* Cada objetivo anual del POA (OBJ) se registra con el **Eje estratégico** al que pertenece y el **OE del PEI** al que
+  contribuye (mantenedor *Catálogos estratégicos* o plantilla, hoja `Catalogos_Estrategicos`).
+* En la iniciativa el usuario elige primero el **eje**; el combo **Objetivo anual del POA** solo muestra los objetivos
+  de ese eje, y el **OE del PEI se completa automáticamente**. En el libro Excel, la columna G usa una lista dependiente
+  del eje (columna B) y la columna H calcula el OE.
+* Las **Acciones estratégicas del PEI (AE)** ya no se usan: el eje estratégico cumple ese rol.
+* **Unidad de medida** del indicador: lista de dos opciones, `Unidad` o `Porcentaje (%)`.
+
+## Partida única en el detalle (base consolidada Cuentas NIIF + Partidas GG)
+
+* El mantenedor maneja una sola base: cada cuenta contable NIIF lleva su **Partida GG** y una **descripción
+  orientativa**.
+* En el detalle de iniciativas, otras operativas, actividades propias e inversión hay un solo combo **«Partida»** con las
+  Partidas GG; al elegirla se muestra su descripción orientativa (también en el buscador 🔍), y la categoría y el código
+  NIIF se derivan de la base consolidada.
+* En el libro Excel: columna **Partida** con lista según el tipo (Ingresos / Egresos / Inversión) y una columna de
+  **descripción orientativa** calculada.
+* Las hojas de Funcionamiento siguen usando las cuentas NIIF (secciones I y J del formato oficial).
 
 ## Empaquetado (.exe sin consola)
 

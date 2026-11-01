@@ -24,7 +24,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from catalogs_seed import (BASES_CALCULO, CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN, MACROGRUPOS)
+from catalogs_seed import (BASES_CALCULO, CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN, MACROGRUPOS,
+                           UNIDADES_MEDIDA)
 from database import DETALLE_TABLES, MCOLS, MESES, Database
 
 TOL = 0.01
@@ -39,6 +40,81 @@ KIND_LABEL = {
     "INV": "Actividades de inversión",
 }
 MASTER_TABLE = {k: v[0] for k, v in DETALLE_TABLES.items()}
+
+# Catálogos estratégicos editables (las Acciones estratégicas del PEI ya no se usan: el eje cumple ese rol).
+CATALOGOS_ESTRATEGICOS = {
+    "EJE": "Eje estratégico", "OE": "Objetivo estratégico del PEI (OE)", "OBJ": "Objetivo anual del POA (OBJ)",
+    "ORIGEN": "Origen de iniciativa", "PRIORIDAD": "Nivel de prioridad", "SUSTENTO_EGR": "Sustento de egresos",
+    "SUSTENTO_ING": "Sustento de ingresos", "CAT_OO": "Categoría de otras operativas",
+    "TIPO_AP": "Tipo de actividad propia", "TIPO_INV": "Tipo de inversión",
+    "TIPO_ACTIVIDAD": "Clasificación de actividades",
+}
+
+# Datos generales y supuestos (clave, etiqueta, descripción)
+PARAM_GENERALES = [
+    ("institucion", "Institución", ""), ("codigo_formato", "Código del formato", ""),
+    ("version_formato", "Versión del formato", ""), ("fecha_aprobacion", "Fecha de aprobación", "AAAA-MM-DD"),
+    ("anio_formulacion", "Año de formulación", "Ejemplo: 2027"),
+    ("fecha_emision", "Fecha de emisión de los parámetros", "AAAA-MM-DD"),
+    ("fecha_limite", "Fecha límite de presentación de la ficha", "AAAA-MM-DD"),
+    ("inflacion_proyectada", "Inflación proyectada (%)", "Referencial para estimar costos sin cotización."),
+    ("tipo_cambio", "Tipo de cambio de referencia (S/ por US$)", "Convierte a soles los montos en US$."),
+    ("valor_uit", "Valor de la UIT (S/)", ""), ("rmv", "Remuneración mínima vital (S/)", ""),
+    ("reajuste_remunerativo_pct", "Reajuste remunerativo (%)", "Filas de Funcionamiento_Egr con «Aplica reajuste = Sí»."),
+    ("mes_inicio_reajuste", "Mes desde el que se aplica el reajuste (1–12)", "1 = enero … 12 = diciembre."),
+    ("tasa_morosidad_pct", "Tasa de morosidad proyectada (%)", "Filas de Funcionamiento_Ing con «Aplica morosidad = Sí»."),
+    ("estudiantes_pregrado", "Estudiantes proyectados — pregrado", ""),
+    ("estudiantes_posgrado", "Estudiantes proyectados — posgrado", ""),
+    ("pension_ref_pregrado", "Pensión promedio de referencia — pregrado (S/)", ""),
+    ("pension_ref_posgrado", "Pensión promedio de referencia — posgrado (S/)", ""),
+    ("cuotas_periodo", "N° de cuotas de pensión por periodo académico", ""),
+    ("director_dpdi", "Director(a) de Planificación y Desarrollo Institucional", "Firma «Revisado por»."),
+    ("cargo_dpdi", "Cargo de quien revisa (DPDI)", ""),
+]
+PARAM_PCT = {"inflacion_proyectada", "reajuste_remunerativo_pct", "tasa_morosidad_pct"}
+PARAM_NUM = {"tipo_cambio", "valor_uit", "rmv", "estudiantes_pregrado", "estudiantes_posgrado", "pension_ref_pregrado",
+             "pension_ref_posgrado", "cuotas_periodo"}
+
+# Estructura de la plantilla «Parámetros y Catálogos» (hoja → [(clave, encabezado)])
+PLANTILLA_PARAM = {
+    "Datos_Generales": [("clave", "Clave"), ("parametro", "Parámetro"), ("valor", "Valor"),
+                        ("nota", "Descripción")],
+    "Unidades_Techos": [("id", "ID"), ("codigo_area", "Código de área"), ("macrogrupo", "Macrogrupo"),
+                        ("nombre_unidad", "Nombre de la unidad orgánica"), ("centro_costo", "Centro de costo"),
+                        ("responsable", "Responsable"), ("cargo", "Cargo"), ("correo", "Correo electrónico"),
+                        ("genera_ingresos", "¿Genera ingresos? (Sí/No)"),
+                        ("techo_iniciativas", "Techo iniciativas (S/)"),
+                        ("techo_funcionamiento", "Techo funcionamiento (S/)"),
+                        ("techo_otras_operativas", "Techo otras operativas (S/)"),
+                        ("techo_inversion", "Techo inversión (S/)"),
+                        ("techo_planilla_docente", "Techo planilla docente (S/)"),
+                        ("techo_planilla_adm", "Techo planilla administrativa (S/)"),
+                        ("techo_marketing", "Techo marketing (S/)"),
+                        ("meta_ingresos_func", "Meta ingresos de funcionamiento (S/)"),
+                        ("meta_resultado_otras", "Meta ingresos otras operativas (S/)"),
+                        ("meta_resultado_propias", "Meta resultado actividades propias (S/)")],
+    "Cuentas_NIIF_Partidas_GG": [("id", "ID"), ("tipo_flujo", "Tipo (Egresos/Ingresos/Inversion)"),
+                                 ("partida_gg", "Partida (Partida GG que verá el usuario)"),
+                                 ("descripcion", "Descripción orientativa"), ("codigo_niif", "Código NIIF"),
+                                 ("partida_rubro", "Cuenta contable NIIF"), ("categoria", "Categoría presupuestal"),
+                                 ("naturaleza", "Naturaleza"), ("resultado_funcion", "Resultado por función"),
+                                 ("activo", "Activo (Sí/No)")],
+    "Catalogos_Estrategicos": [("id", "ID"), ("tipo_catalogo", "Tipo de catálogo"), ("codigo", "Código"),
+                               ("descripcion", "Descripción"), ("eje", "Eje estratégico (solo objetivos POA)"),
+                               ("padre", "OE del PEI (solo objetivos POA)"),
+                               ("extra", "Alcance / indicador / criterio"), ("orden", "Orden")],
+    "Costos_Referencia": [("id", "ID"), ("concepto", "Concepto"), ("unidad_medida", "Unidad de medida"),
+                          ("costo_unitario", "Costo unitario (S/)"), ("fuente", "Fuente / vigencia")],
+    "Plantilla_Funcionamiento": [("id", "ID"), ("ambito", "Ámbito (GLOBAL o código de área)"),
+                                 ("macrogrupo", "Macrogrupo (* = todos)"),
+                                 ("solo_genera_ingresos", "Solo unidades que generan ingresos (Sí/No)"),
+                                 ("tipo_flujo", "Tipo (Egresos/Ingresos)"), ("partida", "Cuenta NIIF (partida)"),
+                                 ("base_calculo", "Base de cálculo"), ("porcentaje", "Porcentaje de la base"),
+                                 ("monto_fijo", "Monto fijo anual (S/)"),
+                                 ("aplica_ajuste", "Aplica reajuste / morosidad (Sí/No)"), ("sustento", "Sustento"),
+                                 ("activo", "Activo (Sí/No)"), ("orden", "Orden")],
+}
+
 DETAIL_TABLE = {k: v[1] for k, v in DETALLE_TABLES.items()}
 FLAT_TABLE = {"FI": "funcionamiento_ing", "FE": "funcionamiento_egr"}
 
@@ -374,9 +450,12 @@ class POAController:
         if self._niif_cache is None:
             rows = self.db.all("catalogo_niif_partidas", "activo = 1", order="id")
             by_tipo: dict[str, dict[str, dict]] = {"Ingresos": {}, "Egresos": {}, "Inversion": {}}
+            by_gg: dict[str, dict[str, dict]] = {"Ingresos": {}, "Egresos": {}, "Inversion": {}}
             for r in rows:
                 by_tipo.setdefault(r["tipo_flujo"], {}).setdefault(norm_key(r["partida_rubro"]), r)
-            self._niif_cache = by_tipo
+                if s(r["partida_gg"]):
+                    by_gg.setdefault(r["tipo_flujo"], {}).setdefault(norm_key(r["partida_gg"]), r)
+            self._niif_cache = {"cuenta": by_tipo, "gg": by_gg}
         return self._niif_cache
 
     def invalidate_cache(self) -> None:
@@ -390,17 +469,56 @@ class POAController:
         return [r["partida_rubro"] for r in rows]
 
     def partidas_gg(self, tipo: str) -> list[str]:
-        rows = self.db.query("SELECT partida_gg FROM catalogo_partidas_gg WHERE tipo = ? ORDER BY partida_gg", (tipo,))
+        """Partidas GG (combo «Partida» del detalle) de la base consolidada Cuentas NIIF + Partidas GG."""
+        rows = self.db.query("SELECT DISTINCT partida_gg FROM catalogo_niif_partidas WHERE tipo_flujo = ? AND activo = 1 "
+                             "AND partida_gg <> '' ORDER BY partida_gg COLLATE NOCASE", (tipo,))
         return [r["partida_gg"] for r in rows]
 
+    def gg_info(self, partida: str, tipo: str = "") -> Optional[dict]:
+        """Cuenta NIIF principal (la primera registrada) de una Partida GG: código, cuenta, categoría y descripción."""
+        tipos = [tipo] if tipo in ("Ingresos", "Egresos", "Inversion") else []
+        tipos += [t for t in ("Egresos", "Ingresos", "Inversion") if t not in tipos]
+        key = norm_key(partida)
+        gg = self._niif()["gg"]
+        for t in tipos:
+            if key in gg.get(t, {}):
+                return gg[t][key]
+        return None
+
+    def descripcion_partida(self, partida: str, tipo: str = "") -> str:
+        """Texto orientativo que se muestra al elegir una Partida."""
+        r = self.gg_info(partida, tipo) or self.buscar_partida(partida, [tipo] if tipo else
+                                                               ("Egresos", "Ingresos", "Inversion"))
+        if not r:
+            return ""
+        desc = s(r.get("descripcion")) or "(sin descripción registrada)"
+        return f"{desc}\nCuenta NIIF: {r['codigo_niif']} · {r['partida_rubro']} · Categoría: {r['categoria'] or '—'}"
+
+    def a_partida_gg(self, partida: str, tipo: str) -> str:
+        """Normaliza a Partida GG: si se recibe el nombre de una cuenta NIIF, devuelve su Partida GG."""
+        if not s(partida):
+            return ""
+        hit = self.gg_info(partida, tipo)
+        if hit:
+            return hit["partida_gg"]
+        cuenta = self.buscar_partida(partida, [tipo] if tipo else ("Egresos", "Ingresos", "Inversion"))
+        if cuenta and s(cuenta["partida_gg"]):
+            return cuenta["partida_gg"]
+        return s(partida)
+
     def buscar_partida(self, partida: str, tipos: Iterable[str] = ("Egresos", "Ingresos", "Inversion")) -> Optional[dict]:
+        """Busca por nombre de cuenta NIIF y, si no existe, por Partida GG."""
         key = norm_key(partida)
         if not key:
             return None
         cat = self._niif()
+        tipos = list(tipos)
         for t in tipos:
-            if key in cat.get(t, {}):
-                return cat[t][key]
+            if key in cat["cuenta"].get(t, {}):
+                return cat["cuenta"][t][key]
+        for t in tipos:
+            if key in cat["gg"].get(t, {}):
+                return cat["gg"][t][key]
         return None
 
     def categoria_de(self, partida: str, tipo: str = "") -> str:
@@ -433,15 +551,43 @@ class POAController:
                 return r["codigo"]
         return ""
 
-    def ae_por_oe(self, oe: str) -> list[str]:
-        oe = code_display(oe)
-        rows = self.db.catalogo("AE")
-        return [r["codigo"] for r in rows if not oe or r["padre"] == oe]
+    def eje_ref(self, eje: str) -> Optional[dict]:
+        """Eje por código (EJ-06), nombre (Transformación Digital) o texto combinado del combo."""
+        key = norm_key(split_display(eje)) if eje and " · " in eje else norm_key(eje)
+        cod = norm_key(code_display(eje))
+        for r in self.db.catalogo("EJE"):
+            if key in (norm_key(r["descripcion"]), norm_key(r["codigo"])) or cod == norm_key(r["codigo"]):
+                return r
+        return None
+
+    def objs_por_eje(self, eje: str, display: str = "both") -> list[str]:
+        """Objetivos anuales del POA vinculados al eje seleccionado (combo dependiente)."""
+        ref = self.eje_ref(eje)
+        if not ref:
+            return []
+        rows = [r for r in self.db.catalogo("OBJ") if norm_key(r["eje"]) == norm_key(ref["codigo"])]
+        return [f"{r['codigo']} · {r['descripcion']}" if display == "both" else r["codigo"] for r in rows]
 
     def oe_de_obj(self, obj: str) -> str:
+        """OE del PEI vinculado al objetivo anual (se carga automáticamente)."""
         r = self.db.query_one("SELECT padre FROM catalogos_estrategicos WHERE tipo_catalogo='OBJ' AND codigo=?",
                               (code_display(obj),))
         return r["padre"] if r else ""
+
+    def eje_de_obj(self, obj: str) -> str:
+        r = self.db.query_one("SELECT eje FROM catalogos_estrategicos WHERE tipo_catalogo='OBJ' AND codigo=?",
+                              (code_display(obj),))
+        return r["eje"] if r else ""
+
+    def oe_display(self, oe: str) -> str:
+        for r in self.db.catalogo("OE"):
+            if r["codigo"] == code_display(oe):
+                return f"{r['codigo']} · {r['descripcion']}"
+        return oe or ""
+
+    @staticmethod
+    def unidades_medida() -> list[str]:
+        return list(UNIDADES_MEDIDA)
 
     def save_catalogo(self, tipo_catalogo: str, data: dict, row_id: Optional[int] = None) -> int:
         data = dict(data, tipo_catalogo=tipo_catalogo)
@@ -562,9 +708,21 @@ class POAController:
         if dup and dup["id"] != mid:
             raise ValueError(f"El código {data['codigo']} ya existe en esta unidad.")
         if kind == "INI":
-            data["eje"] = split_display(data.get("eje", ""))
-            for k in ("obj_poa", "oe", "ae"):
-                data[k] = code_display(data.get(k, ""))
+            ref = self.eje_ref(data.get("eje", ""))
+            data["eje"] = ref["descripcion"] if ref else split_display(data.get("eje", ""))
+            data["obj_poa"] = code_display(data.get("obj_poa", ""))
+            if data["obj_poa"]:
+                eje_obj = self.eje_de_obj(data["obj_poa"])
+                if ref and eje_obj and eje_obj != ref["codigo"]:
+                    raise ValueError(f"El objetivo anual {data['obj_poa']} no pertenece al eje {ref['codigo']} "
+                                     f"(está vinculado a {eje_obj}).")
+                data["oe"] = self.oe_de_obj(data["obj_poa"]) or code_display(data.get("oe", ""))
+            else:
+                data["oe"] = code_display(data.get("oe", ""))
+            data["ae"] = ""
+            um = s(data.get("unidad_medida"))
+            if um:
+                data["unidad_medida"] = UNIDADES_MEDIDA[1] if ("%" in um or "PORCENT" in norm_key(um)) else UNIDADES_MEDIDA[0]
             for k in ("meta_anual", "t1", "t2", "t3"):
                 data[k] = to_float(data.get(k))
             pr = to_float(code_display(s(data.get("prioridad"))))
@@ -599,7 +757,9 @@ class POAController:
             data["tipo"] = "Inversion"
         if data.get("tipo") not in ("Ingresos", "Egresos", "Inversion"):
             raise ValueError("Seleccione el Tipo (Ingresos / Egresos).")
-        data["categoria"] = self.categoria_de(data.get("partida", ""), data["tipo"]) or s(data.get("categoria"))
+        data["partida"] = self.a_partida_gg(data.get("partida", ""), data["tipo"])
+        data["partida_gg"] = data["partida"]
+        data["categoria"] = self.categoria_de(data["partida"], data["tipo"]) or s(data.get("categoria"))
         data["cantidad"] = to_float(data.get("cantidad"))
         data["costo_unit_moneda"] = to_float(data.get("costo_unit_moneda"))
         data["moneda"] = data.get("moneda") or "S/"
@@ -1107,10 +1267,10 @@ class POAController:
         # DF-01
         items = []
         for m in ini:
-            if s(m["nombre"]) and (not s(m["obj_poa"]) or not s(m["oe"]) or not s(m["ae"])):
-                items.append(f"{m['codigo']} {m['nombre']}: falta objetivo POA / OE / AE")
+            if s(m["nombre"]) and (not s(m["eje"]) or not s(m["obj_poa"]) or not s(m["oe"])):
+                items.append(f"{m['codigo']} {m['nombre']}: falta eje / objetivo anual POA / OE")
                 flag(("INI", m["id"]), "DF-01")
-        add("DF-01", "Iniciativas sin objetivo anual del POA, OE o AE del PEI", items)
+        add("DF-01", "Iniciativas sin eje estratégico, objetivo anual del POA u OE del PEI", items)
 
         # DF-02
         items = []
@@ -1242,7 +1402,8 @@ class POAController:
 
             def emit(tipo_act, codigo, nombre, tipo_flujo, partida, partida_gg, categoria, desc, moneda, cant, cu_s,
                      meses, sustento, responsable, est, eje="", oe="", ae="", obj="", prioridad=None):
-                cat = self.buscar_partida(partida, [tipo_flujo, "Egresos", "Ingresos", "Inversion"])
+                cat = (self.gg_info(partida, tipo_flujo) if partida_gg else None) or \
+                    self.buscar_partida(partida, [tipo_flujo, "Egresos", "Ingresos", "Inversion"])
                 for i, monto in enumerate(meses):
                     if abs(monto) < 1e-9:
                         continue
@@ -1252,8 +1413,9 @@ class POAController:
                         "Tipo_Actividad_POA": tipo_act, "Codigo_Actividad": f"{area}-{codigo}",
                         "Nombre_Actividad": nombre, "Eje_Estrategico": eje, "OE_PEI": oe, "AE_PEI": ae, "OBJ_POA": obj,
                         "Prioridad": prioridad, "Tipo_Flujo": tipo_flujo,
-                        "Codigo_NIIF": cat["codigo_niif"] if cat else "", "Partida_Rubro": partida,
-                        "Partida_GG": partida_gg or (cat["partida_gg"] if cat else ""),
+                        "Codigo_NIIF": cat["codigo_niif"] if cat else "",
+                        "Partida_Rubro": cat["partida_rubro"] if cat else partida,
+                        "Partida_GG": partida_gg or (cat["partida_gg"] if cat else "") or partida,
                         "Categoria_Presupuestal": categoria or (cat["categoria"] if cat else ""),
                         "Descripcion_Item": desc, "Moneda_Origen": moneda or "S/", "Cantidad": cant,
                         "Costo_Unitario_Soles": cu_s, "Mes": MESES[i], "Mes_Numero": i + 1,
@@ -1264,10 +1426,10 @@ class POAController:
             for m in d["INI"]:
                 eje = f"{self.eje_codigo(m['eje'])} {m['eje']}".strip()
                 for dd in m["_detalle"]:
-                    emit(KIND_LABEL["INI"], m["codigo"], m["nombre"], dd["tipo"], dd["partida"], dd["partida_gg"],
+                    emit(KIND_LABEL["INI"], m["codigo"], m["nombre"], dd["tipo"], dd["partida"], dd["partida"],
                          dd["categoria"], dd["descripcion"], dd["moneda"], to_float(dd["cantidad"]),
                          dd["_c"]["costo_unit_soles"], dd["_c"]["meses"], dd["sustento"], m["responsable"],
-                         estado(("INI", m["id"]), ("INI-D", dd["id"])), eje, m["oe"], m["ae"], m["obj_poa"],
+                         estado(("INI", m["id"]), ("INI-D", dd["id"])), eje, m["oe"], "", m["obj_poa"],
                          m["prioridad"])
             for r in d["fi"]:
                 emit(KIND_LABEL["FI"], r["codigo"], r["partida"], "Ingresos", r["partida"], "", r["categoria"],
@@ -1281,7 +1443,7 @@ class POAController:
                 for m in d[kind]:
                     nombre = m.get("nombre") or m.get("proyecto") or ""
                     for dd in m["_detalle"]:
-                        emit(KIND_LABEL[kind], m["codigo"], nombre, dd["tipo"], dd["partida"], dd["partida_gg"],
+                        emit(KIND_LABEL[kind], m["codigo"], nombre, dd["tipo"], dd["partida"], dd["partida"],
                              dd["categoria"], dd["descripcion"], dd["moneda"], to_float(dd["cantidad"]),
                              dd["_c"]["costo_unit_soles"], dd["_c"]["meses"], dd["sustento"], m.get("responsable", ""),
                              estado((kind, m["id"]), (f"{kind}-D", dd["id"])),
@@ -1493,7 +1655,7 @@ class POAController:
             gd = lambda r, *n: (lambda c: wd.cell(r, c).value if c else None)(self._col(cols, *n))  # noqa: E731
             for r in self._data_rows(wd, hdr):
                 code = s(wd.cell(r, 1).value).upper()
-                partida = s(gd(r, "Partida / rubro"))
+                partida = s(gd(r, "Partida / rubro GG")) or s(gd(r, "Partida", "Partida / rubro"))
                 cant = gd(r, "Cantidad")
                 cu = gd(r, "Costo unitario (moneda)", "Ingresoss o Costo unitario (moneda)",
                         "Ingresos o Costo unitario (moneda)", "Ingreso o costo unitario (moneda)")
@@ -1512,7 +1674,7 @@ class POAController:
                                             "(se creó un registro vacío para conservar el gasto)")
                 tipo_raw = s(gd(r, "Tipo")).capitalize()
                 tipo = "Inversion" if kind == "INV" else ("Ingresos" if tipo_raw.startswith("Ingreso") else "Egresos")
-                data = dict(tipo=tipo, partida=partida, partida_gg=s(gd(r, "Partida / rubro GG")),
+                data = dict(tipo=tipo, partida=partida,
                             categoria=s(gd(r, "Categoría")), descripcion=s(gd(r, "Descripción del bien o servicio")),
                             cantidad=cant, moneda=s(gd(r, "Moneda")) or "S/", costo_unit_moneda=cu,
                             sustento=s(gd(r, "Sustento")), observaciones=s(gd(r, "Observaciones")))
@@ -1608,6 +1770,215 @@ class POAController:
             self.save_flat(kind, uid, data)
             n += 1
         return n
+
+    def _upsert_gg(self, nombre: str, descripcion: str, tipo: str, codigo: str = "") -> int:
+        """Integra una Partida GG en la base consolidada (Cuentas NIIF + Partidas GG)."""
+        hit = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE partida_gg=? AND tipo_flujo=? ORDER BY id",
+                                (nombre, tipo))
+        if hit:
+            if descripcion:
+                self.db.execute("UPDATE catalogo_niif_partidas SET descripcion=? WHERE partida_gg=? AND tipo_flujo=?",
+                                (descripcion, nombre, tipo))
+                self.db.conn.commit()
+            return 1
+        cuenta = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE tipo_flujo=? AND "
+                                   "(codigo_niif=? OR UPPER(partida_rubro)=UPPER(?)) ORDER BY id",
+                                   (tipo, codigo or "#", nombre))
+        if cuenta:
+            self.db.update("catalogo_niif_partidas", cuenta["id"], {"partida_gg": nombre, "descripcion": descripcion})
+        else:
+            self.db.insert("catalogo_niif_partidas", {"codigo_niif": codigo or "SIN-CODIGO", "partida_rubro": nombre,
+                                                      "partida_gg": nombre, "descripcion": descripcion,
+                                                      "categoria": "INVERSIÓN" if tipo == "Inversion" else "",
+                                                      "tipo_flujo": tipo})
+        self.invalidate_cache()
+        return 1
+
+    # ------------------------------------- plantilla de parámetros y catálogos
+    def import_plantilla_parametros(self, path: str | Path) -> dict:
+        """Lee la plantilla «Parámetros y Catálogos» (descargada desde el sistema) y actualiza la base."""
+        import openpyxl
+        wb = openpyxl.load_workbook(path, data_only=True)
+        faltan = [sh for sh in PLANTILLA_PARAM if sh not in wb.sheetnames]
+        if faltan:
+            raise ValueError("El archivo no es la plantilla de Parámetros y Catálogos (faltan hojas: "
+                             + ", ".join(faltan) + ").")
+        rep: dict[str, Any] = {"avisos": []}
+
+        def tabla(sheet: str) -> list[dict]:
+            ws = wb[sheet]
+            spec = PLANTILLA_PARAM[sheet]
+            hdr = next((r for r in range(1, 12) if s(ws.cell(r, 1).value) in ("ID", "Clave")), None)
+            if hdr is None:
+                raise ValueError(f"No se encontró el encabezado en la hoja {sheet}.")
+            pos = {norm_key(ws.cell(hdr, c).value): c for c in range(1, ws.max_column + 1) if ws.cell(hdr, c).value}
+            out = []
+            for r in range(hdr + 1, ws.max_row + 1):
+                row = {}
+                for key, header in spec:
+                    c = pos.get(norm_key(header))
+                    row[key] = ws.cell(r, c).value if c else None
+                if any(v not in (None, "") for k, v in row.items() if k not in ("id", "clave")):
+                    row["_fila"] = r
+                    out.append(row)
+            return out
+
+        def si(v) -> int:
+            return 1 if s(v).lower() in ("sí", "si", "1", "true", "x", "s") else 0
+
+        def rid(table: str, value) -> Optional[int]:
+            v = to_float(value)
+            if v is None:
+                return None
+            return int(v) if self.db.get(table, int(v)) else None
+
+        with self.db.transaction():
+            # --- Datos generales y supuestos
+            gen = {}
+            for row in tabla("Datos_Generales"):
+                key = s(row["clave"])
+                if key not in {k for k, _l, _n in PARAM_GENERALES}:
+                    continue
+                v = row["valor"]
+                if key in PARAM_PCT:
+                    gen[key] = parse_pct(v)
+                elif key in PARAM_NUM:
+                    gen[key] = to_float(v)
+                elif key == "mes_inicio_reajuste":
+                    gen[key] = int(to_float(v, 1) or 1)
+                else:
+                    gen[key] = s(v)
+            if gen:
+                self.db.update("parametros_globales", 1, gen, commit=False)
+            rep["Datos generales"] = len(gen)
+
+            # --- Unidades y techos
+            n = 0
+            for row in tabla("Unidades_Techos"):
+                area = s(row["codigo_area"]).upper()
+                if not area:
+                    continue
+                data = {k: row[k] for k, _ in PLANTILLA_PARAM["Unidades_Techos"] if k not in ("id",)}
+                data["codigo_area"] = area
+                data["genera_ingresos"] = si(row["genera_ingresos"])
+                data["macrogrupo"] = s(row["macrogrupo"]) or MACROGRUPOS[0]
+                for k in list(data):
+                    if k.startswith(("techo_", "meta_")):
+                        data[k] = to_float(data[k], 0.0) or 0.0
+                    elif isinstance(data[k], str) or data[k] is None:
+                        data[k] = s(data[k])
+                if not data["nombre_unidad"]:
+                    rep["avisos"].append(f"Unidades_Techos fila {row['_fila']}: falta el nombre de la unidad.")
+                    continue
+                uid = rid("unidades_organicas", row["id"])
+                if uid is None:
+                    old = self.db.query_one("SELECT id FROM unidades_organicas WHERE codigo_area=?", (area,))
+                    uid = old["id"] if old else None
+                if uid:
+                    self.db.update("unidades_organicas", uid, data, commit=False)
+                else:
+                    self.db.insert("unidades_organicas", data, commit=False)
+                n += 1
+            rep["Unidades y techos"] = n
+
+            # --- Cuentas NIIF + Partidas GG (base consolidada)
+            n = 0
+            for row in tabla("Cuentas_NIIF_Partidas_GG"):
+                tipo = s(row["tipo_flujo"]).capitalize()
+                tipo = "Inversion" if tipo.startswith("Inver") else tipo
+                cuenta, gg = s(row["partida_rubro"]), s(row["partida_gg"])
+                if tipo not in ("Ingresos", "Egresos", "Inversion") or not (cuenta or gg):
+                    rep["avisos"].append(f"Cuentas_NIIF_Partidas_GG fila {row['_fila']}: falta Tipo o Partida/Cuenta.")
+                    continue
+                data = {"tipo_flujo": tipo, "partida_rubro": cuenta or gg.upper(), "partida_gg": gg,
+                        "descripcion": s(row["descripcion"]), "codigo_niif": s(row["codigo_niif"]) or "SIN-CODIGO",
+                        "categoria": s(row["categoria"]), "naturaleza": s(row["naturaleza"]),
+                        "resultado_funcion": s(row["resultado_funcion"]),
+                        "activo": 1 if row["activo"] in (None, "") else si(row["activo"])}
+                cid = rid("catalogo_niif_partidas", row["id"])
+                if cid is None:
+                    old = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE codigo_niif=? AND "
+                                            "partida_rubro=? AND tipo_flujo=?",
+                                            (data["codigo_niif"], data["partida_rubro"], tipo))
+                    cid = old["id"] if old else None
+                if cid:
+                    self.db.update("catalogo_niif_partidas", cid, data, commit=False)
+                else:
+                    self.db.insert("catalogo_niif_partidas", data, commit=False)
+                n += 1
+            rep["Cuentas NIIF + Partidas GG"] = n
+
+            # --- Catálogos estratégicos (relación Eje → Objetivo anual POA → OE del PEI)
+            n = 0
+            tipos_inv = {norm_key(v): k for k, v in CATALOGOS_ESTRATEGICOS.items()}
+            filas = tabla("Catalogos_Estrategicos")
+            orden_tipo = {"EJE": 0, "OE": 1}
+            filas.sort(key=lambda r: orden_tipo.get(tipos_inv.get(norm_key(r["tipo_catalogo"]), ""), 2))
+            for row in filas:
+                tipo = tipos_inv.get(norm_key(row["tipo_catalogo"])) or s(row["tipo_catalogo"]).upper()
+                code = s(row["codigo"])
+                if tipo not in CATALOGOS_ESTRATEGICOS or not code:
+                    rep["avisos"].append(f"Catalogos_Estrategicos fila {row['_fila']}: tipo de catálogo o código no válido.")
+                    continue
+                data = {"codigo": code, "descripcion": s(row["descripcion"]) or code, "extra": s(row["extra"]),
+                        "orden": int(to_float(row["orden"], 0) or 0), "padre": "", "eje": ""}
+                if tipo == "OBJ":
+                    eje = self.eje_ref(s(row["eje"]))
+                    oe = code_display(s(row["padre"]))
+                    data["eje"] = eje["codigo"] if eje else s(row["eje"])
+                    data["padre"] = oe
+                    if not eje:
+                        rep["avisos"].append(f"Objetivo {code}: eje «{s(row['eje'])}» no existe en el catálogo.")
+                    if not self.db.query_one("SELECT 1 FROM catalogos_estrategicos WHERE tipo_catalogo='OE' AND codigo=?",
+                                             (oe,)):
+                        rep["avisos"].append(f"Objetivo {code}: OE «{oe}» no existe en el catálogo.")
+                old = self.db.query_one("SELECT id FROM catalogos_estrategicos WHERE tipo_catalogo=? AND codigo=?",
+                                        (tipo, code))
+                cid = rid("catalogos_estrategicos", row["id"]) or (old["id"] if old else None)
+                self.save_catalogo(tipo, data, cid)
+                n += 1
+            rep["Catálogos estratégicos"] = n
+
+            # --- Costos de referencia
+            n = 0
+            for row in tabla("Costos_Referencia"):
+                if not s(row["concepto"]):
+                    continue
+                data = {"concepto": s(row["concepto"]), "unidad_medida": s(row["unidad_medida"]),
+                        "costo_unitario": to_float(row["costo_unitario"]), "fuente": s(row["fuente"])}
+                old = self.db.query_one("SELECT id FROM costos_referencia WHERE concepto=?", (data["concepto"],))
+                cid = rid("costos_referencia", row["id"]) or (old["id"] if old else None)
+                self.db.upsert("costos_referencia", data, cid)
+                n += 1
+            rep["Costos de referencia"] = n
+
+            # --- Plantilla de funcionamiento
+            n = 0
+            areas = {u["codigo_area"]: u["id"] for u in self.unidades()}
+            for row in tabla("Plantilla_Funcionamiento"):
+                if not s(row["partida"]):
+                    continue
+                ambito = s(row["ambito"]).upper() or "GLOBAL"
+                base = s(row["base_calculo"]).upper() or "MONTO_FIJO"
+                if base not in BASES_CALCULO:
+                    rep["avisos"].append(f"Plantilla_Funcionamiento fila {row['_fila']}: base «{base}» no válida.")
+                    continue
+                if ambito != "GLOBAL" and ambito not in areas:
+                    rep["avisos"].append(f"Plantilla_Funcionamiento fila {row['_fila']}: el área {ambito} no existe.")
+                    continue
+                data = {"unidad_id": None if ambito == "GLOBAL" else areas[ambito],
+                        "macrogrupo": s(row["macrogrupo"]) or "*", "solo_genera_ingresos": si(row["solo_genera_ingresos"]),
+                        "tipo_flujo": "Ingresos" if s(row["tipo_flujo"]).startswith("Ingreso") else "Egresos",
+                        "partida": s(row["partida"]), "base_calculo": base,
+                        "porcentaje": to_float(row["porcentaje"], 1.0), "monto_fijo": to_float(row["monto_fijo"], 0.0),
+                        "aplica_ajuste": "Sí" if si(row["aplica_ajuste"]) else "No", "sustento": s(row["sustento"]),
+                        "activo": 1 if row["activo"] in (None, "") else si(row["activo"]),
+                        "orden": int(to_float(row["orden"], 0) or 0)}
+                self.db.upsert("plantilla_funcionamiento", data, rid("plantilla_funcionamiento", row["id"]))
+                n += 1
+            rep["Plantilla de funcionamiento"] = n
+        self.invalidate_cache()
+        return rep
 
     # ------------------------------------------- carga masiva de cuentas NIIF
     def carga_masiva_niif(self, path: str | Path) -> dict:
@@ -1718,10 +2089,10 @@ class POAController:
                     continue
                 if re.match(r"^[A-S]\.\s", s(b)):
                     break
-                out.append((s(b), s(ws.cell(r, 3).value), s(ws.cell(r, 4).value)))
+                out.append((s(b), s(ws.cell(r, 3).value), s(ws.cell(r, 4).value), s(ws.cell(r, 5).value)))
             return out
 
-        def upsert_cat(tipo, code, desc, padre="", extra="", orden=0):
+        def upsert_cat(tipo, code, desc, padre="", extra="", orden=0, eje=""):
             if not code:
                 return 0
             old = self.db.query_one("SELECT id, descripcion FROM catalogos_estrategicos WHERE tipo_catalogo=? AND codigo=?",
@@ -1731,22 +2102,31 @@ class POAController:
                 data["descripcion"] = desc
             if padre:
                 data["padre"] = padre
+            if eje:
+                data["eje"] = eje
             if extra:
                 data["extra"] = extra
             self.save_catalogo(tipo, data, old["id"] if old else None)
             return 1
 
-        rep["OE"] = sum(upsert_cat("OE", b, c, "", d, i) for i, (b, c, d) in enumerate(rows_of("E")))
-        rep["AE"] = sum(upsert_cat("AE", b, d, c, "", i) for i, (b, c, d) in enumerate(rows_of("F")))
-        rep["OBJ"] = sum(upsert_cat("OBJ", b, c, d, "", i) for i, (b, c, d) in enumerate(rows_of("G")))
-        rep["EJE"] = sum(upsert_cat("EJE", b, c, "", d, i) for i, (b, c, d) in enumerate(rows_of("H")))
-        rep["CAT_OO"] = sum(upsert_cat("CAT_OO", b, c, "", d, i) for i, (b, c, d) in enumerate(rows_of("K")))
-        rep["TIPO_AP"] = sum(upsert_cat("TIPO_AP", b, b, "", c, i) for i, (b, c, d) in enumerate(rows_of("L")))
-        rep["TIPO_INV"] = sum(upsert_cat("TIPO_INV", b, b, "", c, i) for i, (b, c, d) in enumerate(rows_of("M")))
-        rep["PRIORIDAD"] = sum(upsert_cat("PRIORIDAD", b, c, "", d, i) for i, (b, c, d) in enumerate(rows_of("O")))
-        rep["ORIGEN"] = sum(upsert_cat("ORIGEN", b, b, "", "", i) for i, (b, c, d) in enumerate(rows_of("P")))
-        rep["SUSTENTO_EGR"] = sum(upsert_cat("SUSTENTO_EGR", b, b, "", "", i) for i, (b, c, d) in enumerate(rows_of("Q")))
-        rep["SUSTENTO_ING"] = sum(upsert_cat("SUSTENTO_ING", b, b, "", "", i) for i, (b, c, d) in enumerate(rows_of("R")))
+        def eje_code(value):
+            ref = self.eje_ref(value) if value else None
+            return ref["codigo"] if ref else s(value)
+
+        # La sección F (acciones estratégicas del PEI) ya no se utiliza: el eje estratégico cumple ese rol.
+        rep["EJE"] = sum(upsert_cat("EJE", b, c, "", d, i) for i, (b, c, d, e) in enumerate(rows_of("H")))
+        rep["OE"] = sum(upsert_cat("OE", b, c, "", d, i) for i, (b, c, d, e) in enumerate(rows_of("E")))
+        rep["OBJ"] = sum(upsert_cat("OBJ", b, c, code_display(d), "", i, eje_code(e))
+                         for i, (b, c, d, e) in enumerate(rows_of("G")))
+        rep["CAT_OO"] = sum(upsert_cat("CAT_OO", b, c, "", d, i) for i, (b, c, d, e) in enumerate(rows_of("K")))
+        rep["TIPO_AP"] = sum(upsert_cat("TIPO_AP", b, b, "", c, i) for i, (b, c, d, e) in enumerate(rows_of("L")))
+        rep["TIPO_INV"] = sum(upsert_cat("TIPO_INV", b, b, "", c, i) for i, (b, c, d, e) in enumerate(rows_of("M")))
+        rep["PRIORIDAD"] = sum(upsert_cat("PRIORIDAD", b, c, "", d, i) for i, (b, c, d, e) in enumerate(rows_of("O")))
+        rep["ORIGEN"] = sum(upsert_cat("ORIGEN", b, b, "", "", i) for i, (b, c, d, e) in enumerate(rows_of("P")))
+        rep["SUSTENTO_EGR"] = sum(upsert_cat("SUSTENTO_EGR", b, b, "", "", i)
+                                  for i, (b, c, d, e) in enumerate(rows_of("Q")))
+        rep["SUSTENTO_ING"] = sum(upsert_cat("SUSTENTO_ING", b, b, "", "", i)
+                                  for i, (b, c, d, e) in enumerate(rows_of("R")))
 
         def upsert_niif(code, partida, categoria, tipo):
             if not partida:
@@ -1761,23 +2141,17 @@ class POAController:
                 self.db.insert("catalogo_niif_partidas", data)
             return 1
 
-        rep["NIIF_egresos"] = sum(upsert_niif(b, c, d, "Egresos") for b, c, d in rows_of("I"))
-        rep["NIIF_ingresos"] = sum(upsert_niif(b, c, d, "Ingresos") for b, c, d in rows_of("J"))
+        rep["NIIF_egresos"] = sum(upsert_niif(b, c, d, "Egresos") for b, c, d, e in rows_of("I"))
+        rep["NIIF_ingresos"] = sum(upsert_niif(b, c, d, "Ingresos") for b, c, d, e in rows_of("J"))
+        self.invalidate_cache()
         n_gg = 0
-        for b, c, d in rows_of("N"):
-            if not b:
-                continue
-            tipo = d if d in ("Egresos", "Ingresos") else "Inversion"
-            codigo = "" if tipo != "Inversion" else d
-            old = self.db.query_one("SELECT id FROM catalogo_partidas_gg WHERE partida_gg=? AND tipo=?", (b, tipo))
-            self.db.upsert("catalogo_partidas_gg", {"partida_gg": b, "descripcion": c, "tipo": tipo,
-                                                     "codigo_niif": codigo}, old["id"] if old else None)
-            if tipo == "Inversion" and d:
-                upsert_niif(d, b, self.categoria_de(b, "Inversion") or "INVERSIÓN", "Inversion")
-            n_gg += 1
+        for b, c, d, e in rows_of("N"):
+            if b:
+                tipo = d if d in ("Egresos", "Ingresos") else "Inversion"
+                n_gg += self._upsert_gg(b, c, tipo, d if tipo == "Inversion" else "")
         rep["Partidas_GG"] = n_gg
         n_cr = 0
-        for b, c, d in rows_of("S"):
+        for b, c, d, e in rows_of("S"):
             if not b:
                 continue
             m = re.match(r"^(.*?)\s*[—-]\s*S/\s*([\d.,]*)\s*$", c)

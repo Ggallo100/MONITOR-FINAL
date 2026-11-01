@@ -14,7 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from controllers import (PRORRATEO_12, Params, POAController, calc_detalle, calc_fegr, calc_fing,  # noqa: E402
                          control_meta, distribuir, parse_pct, to_float)
 from database import MCOLS, Database  # noqa: E402
-from exporter import OfficialWorkbookExporter, export_bd_consolidada, export_pdf  # noqa: E402
+from exporter import (OfficialWorkbookExporter, export_bd_consolidada, export_pdf,  # noqa: E402
+                      export_plantilla_parametros)
 
 
 def months(values):
@@ -86,9 +87,10 @@ class FlujoCompletoTest(unittest.TestCase):
                                        "techo_inversion": 3000, "techo_planilla_adm": 30000,
                                        "meta_ingresos_func": 100000, "meta_resultado_propias": 500})
         c, uid = self.c, self.uid
-        ini = c.save_master("INI", uid, {"eje": "EJ-06 · Transformación Digital", "nombre": "Aulas virtuales",
-                                         "origen": "Otro", "obj_poa": "OBJ-01", "oe": "OE1", "ae": "AE1.1",
-                                         "indicador": "Cursos", "meta_anual": 10, "t1": 5, "t2": 5,
+        ini = c.save_master("INI", uid, {"eje": "EJ-01 · Adaptación académica", "nombre": "Aulas virtuales",
+                                         "origen": "Otro", "obj_poa": "OBJ-01 · Objetivo anual 01 del POA",
+                                         "indicador": "Cursos", "unidad_medida": "Cantidad",
+                                         "meta_anual": 10, "t1": 5, "t2": 5,
                                          "responsable": "Jefe TI", "prioridad": "2"})
         c.save_detalle("INI", ini, {"tipo": "Egresos", "partida": "MATERIAL DE OFICINA", "cantidad": 10, "moneda": "US$",
                                     "costo_unit_moneda": 100, "sustento": "Cotización", "m03": 1750, "m08": 1750})
@@ -180,6 +182,62 @@ class FlujoCompletoTest(unittest.TestCase):
         self.assertTrue(export_pdf(self.c, self.uid, out / "ficha.pdf").stat().st_size > 5000)
         files = export_bd_consolidada(self.c, [self.uid, uid2], out / "bd.xlsx")
         self.assertTrue(all(f.exists() for f in files))
+
+    def test_eje_objetivo_oe_y_partida_gg(self):
+        ini = self.c.list_masters("INI", self.uid)[0]
+        self.assertEqual((ini["eje"], ini["obj_poa"], ini["oe"]), ("Adaptación académica", "OBJ-01", "OE1"))
+        self.assertEqual(ini["unidad_medida"], "Unidad")
+        self.assertEqual(self.c.objs_por_eje("EJ-01", "codigo"), ["OBJ-01", "OBJ-10"])
+        with self.assertRaises(ValueError):
+            self.c.save_master("INI", self.uid, {"eje": "EJ-03", "nombre": "x", "obj_poa": "OBJ-01"})
+        det = self.c.list_detalle("INI", ini["id"])[0]
+        self.assertEqual(det["partida"], "Material de oficina")
+        self.assertEqual(det["categoria"], "SUMINISTROS")
+        self.assertIn("Cuenta NIIF: 6941010100", self.c.descripcion_partida("Material de oficina", "Egresos"))
+        self.assertIn("Material de oficina", self.c.partidas_gg("Egresos"))
+        self.assertNotIn("SUELDOS ADMINISTRATIVOS", self.c.partidas_gg("Egresos"))
+        bd = [r for r in self.c.consolidated_rows([self.uid]) if r["Codigo_Actividad"] == "TST-INI-01"]
+        self.assertEqual({r["Codigo_NIIF"] for r in bd}, {"6941010100"})
+        self.assertEqual({r["Partida_GG"] for r in bd}, {"Material de oficina"})
+
+    def test_plantilla_parametros_ida_y_vuelta(self):
+        import openpyxl
+        path = export_plantilla_parametros(self.c, Path(self.tmp.name) / "plantilla.xlsx")
+        wb = openpyxl.load_workbook(path)
+        self.assertEqual(wb.sheetnames, ["Instrucciones", "Datos_Generales", "Unidades_Techos",
+                                         "Cuentas_NIIF_Partidas_GG", "Catalogos_Estrategicos", "Costos_Referencia",
+                                         "Plantilla_Funcionamiento", "Listas"])
+        ws = wb["Catalogos_Estrategicos"]
+        r = 5
+        while ws.cell(r, 2).value:
+            r += 1
+        ws.cell(r, 2, "Eje estratégico"); ws.cell(r, 3, "EJ-10"); ws.cell(r, 4, "Sostenibilidad")  # noqa: E702
+        for j, v in enumerate(["", "Objetivo anual del POA (OBJ)", "OBJ-16", "Reducir la huella de carbono",
+                               "EJ-10", "OE3"], start=1):
+            ws.cell(r + 1, j, v or None)
+        ws = wb["Cuentas_NIIF_Partidas_GG"]
+        r = 5
+        while ws.cell(r, 2).value:
+            r += 1
+        for j, v in enumerate(["", "Egresos", "Servicio de prueba", "Descripción de prueba", "999999",
+                               "SERVICIO DE PRUEBA", "OTROS SERVICIOS", "", "", "Sí"], start=1):
+            ws.cell(r, j, v or None)
+        ws = wb["Datos_Generales"]
+        for rr in range(5, ws.max_row + 1):
+            if ws.cell(rr, 1).value == "tipo_cambio":
+                ws.cell(rr, 3, 3.8)
+        edit = Path(self.tmp.name) / "plantilla_editada.xlsx"
+        wb.save(edit)
+        n_cuentas = self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas")
+        rep = self.c.import_plantilla_parametros(edit)
+        self.assertEqual(rep["avisos"], [])
+        self.assertAlmostEqual(self.c.params.tc, 3.8)
+        self.assertEqual(self.c.objs_por_eje("Sostenibilidad", "codigo"), ["OBJ-16"])
+        self.assertEqual(self.c.oe_de_obj("OBJ-16"), "OE3")
+        self.assertIn("Servicio de prueba", self.c.partidas_gg("Egresos"))
+        self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas"), n_cuentas + 1)
+        self.c.import_plantilla_parametros(edit)
+        self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas"), n_cuentas + 1)
 
 
 if __name__ == "__main__":

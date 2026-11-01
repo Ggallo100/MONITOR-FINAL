@@ -36,7 +36,8 @@ from catalogs_seed import BASES_CALCULO, MACROGRUPOS  # noqa: E402
 from controllers import (DETAIL_TABLE, PRORRATEO_12, POAController, calc_detalle, calc_fegr, calc_fing,  # noqa: E402
                          code_display, control_meta, distribuir, fmt_mark, fmt_money, fmt_pct, s, to_float)
 from database import MCOLS, MESES, Database  # noqa: E402
-from exporter import export_bd_consolidada, export_libro_oficial, export_pdf  # noqa: E402
+from exporter import (export_bd_consolidada, export_libro_oficial, export_pdf,  # noqa: E402
+                      export_plantilla_parametros)
 
 APP_TITLE = "Sistema de Formulación Presupuestal y Operativa POA - DPDI"
 ROLE_ADMIN = "Administrador DPDI"
@@ -165,12 +166,14 @@ class DataTable(ctk.CTkFrame):
 class SearchDialog(ctk.CTkToplevel):
     """Buscador modal sobre una lista de valores (catálogo NIIF de 250+ partidas)."""
 
-    def __init__(self, master, title: str, values: list[str], on_pick: Callable[[str], None], initial: str = ""):
+    def __init__(self, master, title: str, values: list[str], on_pick: Callable[[str], None], initial: str = "",
+                 describe: Optional[Callable[[str], str]] = None):
         super().__init__(master)
         self.title(title)
-        self.geometry("620x480")
+        self.geometry("680x560" if describe else "620x480")
         self.values = values
         self.on_pick = on_pick
+        self.describe = describe
         self.entry = ctk.CTkEntry(self, placeholder_text="Escriba para filtrar (código, partida o categoría)…")
         self.entry.pack(fill="x", padx=10, pady=(10, 6))
         self.entry.insert(0, initial)
@@ -183,6 +186,13 @@ class SearchDialog(ctk.CTkToplevel):
         sb.pack(side="right", fill="y")
         self.info = ctk.CTkLabel(self, text="")
         self.info.pack(pady=2)
+        self.desc = None
+        if describe:
+            ctk.CTkLabel(self, text="Descripción orientativa", font=ctk.CTkFont(weight="bold")).pack(anchor="w",
+                                                                                                  padx=10)
+            self.desc = ctk.CTkTextbox(self, height=90, wrap="word")
+            self.desc.pack(fill="x", padx=10, pady=(0, 6))
+            self.lb.bind("<<ListboxSelect>>", lambda e: self._show_desc())
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.pack(fill="x", padx=10, pady=(0, 10))
         ctk.CTkButton(bar, text="Seleccionar", command=self._pick).pack(side="right")
@@ -211,9 +221,20 @@ class SearchDialog(ctk.CTkToplevel):
             if all(w in up for w in words):
                 self.lb.insert("end", v)
                 n += 1
-        self.info.configure(text=f"{n} de {len(self.values)} partidas")
+        self.info.configure(text=f"{n} de {len(self.values)} opciones")
         if n:
             self.lb.selection_set(0)
+        self._show_desc()
+
+    def _show_desc(self):
+        if not self.desc:
+            return
+        sel = self.lb.curselection()
+        text = self.describe(self.lb.get(sel[0])) if sel else ""
+        self.desc.configure(state="normal")
+        self.desc.delete("1.0", "end")
+        self.desc.insert("1.0", text)
+        self.desc.configure(state="disabled")
 
     def _pick(self):
         sel = self.lb.curselection()
@@ -257,11 +278,45 @@ class SearchCombo(ctk.CTkFrame):
             self.on_change()
 
 
+class PartidaCombo(ctk.CTkFrame):
+    """Combo «Partida» (Partidas GG) + buscador con ventana de descripción orientativa."""
+
+    def __init__(self, master, values_fn: Callable[[], list[str]], describe: Optional[Callable[[str], str]],
+                 width: int = 300, on_change: Optional[Callable] = None):
+        super().__init__(master, fg_color="transparent")
+        self.values_fn, self.describe, self.on_change = values_fn, describe, on_change
+        self.combo = ctk.CTkComboBox(self, values=[], width=width - 36, state="readonly",
+                                     command=lambda v: on_change and on_change())
+        self.combo.grid(row=0, column=0, sticky="ew")
+        ctk.CTkButton(self, text="🔍", width=32, command=self.open).grid(row=0, column=1, padx=(4, 0))
+        self.grid_columnconfigure(0, weight=1)
+        self.combo.set("")
+
+    def reload(self):
+        self.combo.configure(values=self.values_fn())
+
+    def configure_values(self, values: list[str]):
+        self.combo.configure(values=values)
+
+    def open(self):
+        SearchDialog(self.winfo_toplevel(), "Buscar Partida", self.values_fn(), lambda v: self.set(v, fire=True),
+                     "", describe=self.describe)
+
+    def get(self) -> str:
+        return self.combo.get().strip()
+
+    def set(self, value: Any, fire: bool = False):
+        self.combo.set(s(value))
+        if fire and self.on_change:
+            self.on_change()
+
+
 class Field:
     def __init__(self, key: str, label: str, kind: str = "entry", values: Any = None, width: int = 200,
-                 span: int = 1, height: int = 60, anchor: str = "e"):
+                 span: int = 1, height: int = 60, anchor: str = "e", describe: Optional[Callable] = None):
         self.key, self.label, self.kind, self.values = key, label, kind, values
         self.width, self.span, self.height, self.anchor = width, span, height, anchor
+        self.describe = describe
 
 
 class Form(ctk.CTkFrame):
@@ -307,6 +362,9 @@ class Form(ctk.CTkFrame):
             w.bind("<KeyRelease>", self._changed)
         elif f.kind == "search":
             w = SearchCombo(self, f.values, width=f.width, on_change=self._changed)
+        elif f.kind == "partida":
+            w = PartidaCombo(self, lambda f=f: self._values(f), f.describe, width=f.width, on_change=self._changed)
+            w.reload()
         elif f.kind == "text":
             w = ctk.CTkTextbox(self, width=f.width, height=f.height, wrap="word")
             w.bind("<KeyRelease>", self._changed)
@@ -324,9 +382,15 @@ class Form(ctk.CTkFrame):
         for k, f in self.fields.items():
             if f.kind in ("combo", "combo_free"):
                 self.widgets[k].configure(values=self._values(f))
+            elif f.kind == "partida":
+                self.widgets[k].reload()
 
     def set_combo_values(self, key: str, values: list[str]):
-        self.widgets[key].configure(values=[s(v) for v in values])
+        w = self.widgets[key]
+        if isinstance(w, PartidaCombo):
+            w.configure_values([s(v) for v in values])
+        else:
+            w.configure(values=[s(v) for v in values])
 
     def get(self) -> dict:
         out = {}
@@ -364,7 +428,7 @@ class Form(ctk.CTkFrame):
             w.select() if v and str(v) not in ("0", "False") else w.deselect()
         elif f.kind in ("combo", "combo_free"):
             w.set(s(v))
-        elif f.kind == "search":
+        elif f.kind in ("search", "partida"):
             w.set(v)
         else:
             w.delete(0, "end")
@@ -841,6 +905,13 @@ class ParametrosTab(ctk.CTkFrame):
     def __init__(self, master, app: "App"):
         super().__init__(master, fg_color="transparent")
         self.app, self.c, db = app, app.c, app.db
+        bar = ctk.CTkFrame(self, fg_color=("#E8EEF7", "gray20"), corner_radius=8)
+        bar.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(bar, text="Actualización masiva:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=8)
+        ctk.CTkButton(bar, text="⬇ Descargar plantilla de Parámetros y Catálogos (.xlsx)", width=10, fg_color="#1E8449",
+                      command=self.download_template).pack(side="left", padx=4, pady=5)
+        ctk.CTkButton(bar, text="⬆ Importar plantilla de Parámetros y Catálogos (.xlsx)", width=10, fg_color="#2E86C1",
+                      command=self.import_template).pack(side="left", padx=4, pady=5)
         tv = ctk.CTkTabview(self)
         tv.pack(fill="both", expand=True)
         self.panels: list = []
@@ -899,39 +970,34 @@ class ParametrosTab(ctk.CTkFrame):
         p.pack(fill="both", expand=True)
         self.panels.append(p)
 
-        # --- Cuentas NIIF
-        t = tv.add("Cuentas NIIF")
+        # --- Base consolidada Cuentas NIIF + Partidas GG
+        t = tv.add("Cuentas NIIF + Partidas GG")
+        ctk.CTkLabel(t, text="Base única: cada cuenta contable NIIF lleva la «Partida» (GG) que el usuario elige en el "
+                             "detalle y su descripción orientativa. Las cuentas sin Partida GG solo se usan en "
+                             "Funcionamiento.", text_color="gray35", wraplength=1100, justify="left").pack(anchor="w",
+                                                                                                          padx=6)
         p = CrudPanel(t, app, "catalogo_niif_partidas",
-                      [("codigo_niif", "Código NIIF", 100), ("partida_rubro", "Partida / rubro", 300),
-                       ("partida_gg", "Partida GG", 200), ("categoria", "Categoría", 210), ("tipo_flujo", "Tipo", 80),
-                       ("naturaleza", "Naturaleza", 200), ("resultado_funcion", "Resultado por función", 180)],
-                      [Field("codigo_niif", "Código NIIF"), Field("partida_rubro", "Partida / rubro"),
-                       Field("partida_gg", "Partida / rubro GG", "combo_free",
+                      [("tipo_flujo", "Tipo", 75), ("partida_gg", "Partida (GG)", 230),
+                       ("descripcion", "Descripción orientativa", 300), ("codigo_niif", "Código NIIF", 95),
+                       ("partida_rubro", "Cuenta contable NIIF", 260), ("categoria", "Categoría", 190),
+                       ("naturaleza", "Naturaleza", 180), ("resultado_funcion", "Resultado por función", 170),
+                       ("activo", "Activo", 50, "int")],
+                      [Field("tipo_flujo", "Tipo", "combo", ["Egresos", "Ingresos", "Inversion"]),
+                       Field("partida_gg", "Partida (GG)", "combo_free",
                              lambda: sorted(set(self.c.partidas_gg("Egresos") + self.c.partidas_gg("Ingresos")
-                                                + self.c.partidas_gg("Inversion")))),
+                                                + self.c.partidas_gg("Inversion"))), width=260),
+                       Field("descripcion", "Descripción orientativa", "text", height=80),
+                       Field("codigo_niif", "Código NIIF"), Field("partida_rubro", "Cuenta contable NIIF"),
                        Field("categoria", "Categoría", "combo_free",
                              lambda: [r["categoria"] for r in db.query(
                                  "SELECT DISTINCT categoria FROM catalogo_niif_partidas ORDER BY categoria")]),
-                       Field("tipo_flujo", "Tipo", "combo", ["Ingresos", "Egresos", "Inversion"]),
                        Field("naturaleza", "Naturaleza"), Field("resultado_funcion", "Resultado por función"),
                        Field("activo", "Activo", "check")],
-                      order="tipo_flujo, partida_rubro", save_fn=self.c.save_partida_niif,
-                      delete_fn=self.c.delete_partida_niif,
-                      search_cols=("codigo_niif", "partida_rubro", "categoria", "tipo_flujo", "partida_gg"),
+                      order="tipo_flujo, partida_gg='', partida_gg COLLATE NOCASE, partida_rubro",
+                      save_fn=self.c.save_partida_niif, delete_fn=self.c.delete_partida_niif,
+                      search_cols=("codigo_niif", "partida_rubro", "categoria", "tipo_flujo", "partida_gg", "descripcion"),
                       defaults=lambda: {"tipo_flujo": "Egresos", "activo": 1},
                       extra_buttons=[("Carga masiva NIIF (.xlsx/.csv)", self.carga_masiva, "gray40")])
-        p.pack(fill="both", expand=True)
-        self.panels.append(p)
-
-        # --- Partidas GG
-        t = tv.add("Partidas GG")
-        p = CrudPanel(t, app, "catalogo_partidas_gg",
-                      [("partida_gg", "Partida GG", 300), ("descripcion", "Descripción", 420), ("tipo", "Tipo", 90),
-                       ("codigo_niif", "Código NIIF (inversión)", 150)],
-                      [Field("partida_gg", "Partida GG"), Field("descripcion", "Descripción", "text", height=80),
-                       Field("tipo", "Tipo", "combo", ["Egresos", "Ingresos", "Inversion"]),
-                       Field("codigo_niif", "Código NIIF (inversión)")],
-                      order="tipo, partida_gg", search_cols=("partida_gg", "descripcion", "tipo"))
         p.pack(fill="both", expand=True)
         self.panels.append(p)
 
@@ -940,29 +1006,29 @@ class ParametrosTab(ctk.CTkFrame):
         top = ctk.CTkFrame(t, fg_color="transparent")
         top.pack(fill="x")
         ctk.CTkLabel(top, text="Catálogo:").pack(side="left", padx=6)
-        self.cat_names = {"Ejes estratégicos (EJ)": "EJE", "Objetivos PEI (OE)": "OE", "Acciones estratégicas (AE)": "AE",
-                          "Objetivos anuales POA (OBJ)": "OBJ", "Orígenes de iniciativa": "ORIGEN",
+        self.cat_names = {"Ejes estratégicos (EJ)": "EJE", "Objetivos estratégicos PEI (OE)": "OE",
+                          "Objetivos anuales POA (OBJ) — Eje → OBJ → OE": "OBJ", "Orígenes de iniciativa": "ORIGEN",
                           "Niveles de prioridad": "PRIORIDAD", "Sustentos de egresos": "SUSTENTO_EGR",
                           "Sustentos de ingresos": "SUSTENTO_ING", "Categorías otras operativas (OO)": "CAT_OO",
                           "Tipos de actividad propia": "TIPO_AP", "Tipos de inversión": "TIPO_INV",
                           "Clasificación de actividades": "TIPO_ACTIVIDAD"}
-        self.cat_sel = ctk.CTkComboBox(top, values=list(self.cat_names), width=300, state="readonly",
+        self.cat_sel = ctk.CTkComboBox(top, values=list(self.cat_names), width=360, state="readonly",
                                        command=lambda v: self.cat_panel.refresh())
         self.cat_sel.set("Ejes estratégicos (EJ)")
         self.cat_sel.pack(side="left")
-        ctk.CTkLabel(top, text="Padre = OE vinculado (AE, OBJ) · Extra = indicador / alcance / criterio",
+        ctk.CTkLabel(top, text="En los objetivos anuales registre el Eje al que pertenecen y el OE del PEI al que "
+                               "contribuyen · Extra = indicador / alcance / criterio",
                      text_color="gray40").pack(side="left", padx=10)
         self.cat_panel = CrudPanel(
             t, app, "catalogos_estrategicos",
-            [("codigo", "Código", 120), ("descripcion", "Descripción", 380), ("padre", "Padre", 80),
-             ("extra", "Extra", 380), ("orden", "Orden", 60, "int")],
+            [("codigo", "Código", 110), ("descripcion", "Descripción", 360), ("eje", "Eje", 70),
+             ("padre", "OE del PEI", 80), ("extra", "Extra", 360), ("orden", "Orden", 60, "int")],
             [Field("codigo", "Código"), Field("descripcion", "Descripción", "text", height=70),
-             Field("padre", "Padre (OE)", "combo_free", lambda: [""] + self.c.catalogo_values("OE")),
+             Field("eje", "Eje estratégico (solo OBJ)", "combo_free", lambda: [""] + self.c.catalogo_values("EJE")),
+             Field("padre", "OE del PEI (solo OBJ)", "combo_free", lambda: [""] + self.c.catalogo_values("OE")),
              Field("extra", "Extra", "text", height=70), Field("orden", "Orden")],
             where=lambda: ("tipo_catalogo = ?", (self.cat_names[self.cat_sel.get()],)), order="orden, codigo",
-            save_fn=lambda d, i: self.c.save_catalogo(self.cat_names[self.cat_sel.get()],
-                                                       dict(d, orden=int(to_float(d.get("orden"), 0) or 0)), i),
-            search_cols=("codigo", "descripcion", "padre"))
+            save_fn=self._save_catalogo, search_cols=("codigo", "descripcion", "padre", "eje"))
         self.cat_panel.pack(fill="both", expand=True)
         self.panels.append(self.cat_panel)
 
@@ -1007,6 +1073,52 @@ class ParametrosTab(ctk.CTkFrame):
         p.pack(fill="both", expand=True)
         self.panels.append(p)
         self.plantilla_panel = p
+
+    def _save_catalogo(self, d: dict, rid: Optional[int]) -> int:
+        tipo = self.cat_names[self.cat_sel.get()]
+        data = dict(d, orden=int(to_float(d.get("orden"), 0) or 0))
+        if tipo == "OBJ":
+            if not data.get("eje") or not data.get("padre"):
+                raise ValueError("Cada objetivo anual del POA debe tener su Eje estratégico y su OE del PEI.")
+            data["eje"], data["padre"] = code_display(data["eje"]), code_display(data["padre"])
+        else:
+            data["eje"], data["padre"] = "", ""
+        return self.c.save_catalogo(tipo, data, rid)
+
+    @guarded
+    def download_template(self):
+        path = filedialog.asksaveasfilename(title="Descargar plantilla de Parámetros y Catálogos",
+                                            defaultextension=".xlsx",
+                                            initialfile=f"Plantilla_Parametros_Catalogos_POA_{self.c.anio}.xlsx",
+                                            filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        out = export_plantilla_parametros(self.c, path)
+        self.app.db.log(self.app.role, "Descargar plantilla de parámetros", Path(path).name)
+        if messagebox.askyesno("Plantilla", f"Plantilla generada:\n{out}\n\nEdítela y luego use «Importar plantilla»."
+                                            "\n¿Abrir el archivo?"):
+            self.app._open(out)
+
+    @guarded
+    def import_template(self):
+        path = filedialog.askopenfilename(title="Importar plantilla de Parámetros y Catálogos",
+                                          filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        if not messagebox.askyesno("Importar plantilla", "Se actualizarán o agregarán los parámetros, unidades, "
+                                                         "cuentas, catálogos, costos y la plantilla de funcionamiento "
+                                                         "del archivo (no se elimina nada). ¿Continuar?"):
+            return
+        rep = self.c.import_plantilla_parametros(path)
+        self.app.db.log(self.app.role, "Importar plantilla de parámetros", Path(path).name)
+        avisos = rep.pop("avisos")
+        msg = "\n".join(f"{k}: {v} registros" for k, v in rep.items())
+        if avisos:
+            msg += "\n\nAvisos:\n" + "\n".join(f"• {a}" for a in avisos[:15])
+        messagebox.showinfo("Plantilla importada", msg)
+        self.refresh()
+        self.app.mark_dirty(except_tab=self)
+        self.app.update_header()
 
     def _unit_choices(self) -> list[str]:
         self.unit_map = {"GLOBAL": None}
@@ -1090,7 +1202,7 @@ class ParametrosTab(ctk.CTkFrame):
 # =============================================================================
 # Pestañas maestro-detalle (Iniciativas, Otras operativas, Act. propias, Inversión)
 # =============================================================================
-DETAIL_COLUMNS = [("tipo", "Tipo", 75), ("partida", "Partida / rubro", 220), ("categoria", "Categoría", 150),
+DETAIL_COLUMNS = [("tipo", "Tipo", 75), ("partida", "Partida", 220), ("categoria", "Categoría", 150),
                   ("descripcion", "Descripción", 220), ("cantidad", "Cant.", 60, "num"), ("moneda", "Mon.", 45),
                   ("_cu", "C.U. (S/)", 95, "money"), ("_total", "Total (S/)", 105, "money"),
                   *[(f"_m{i}", m, 82, "money") for i, m in enumerate(MESES)],
@@ -1176,16 +1288,18 @@ class MasterDetailTab(ctk.CTkFrame):
         k = self.kind
         if k == "INI":
             return [
-                Field("codigo", "Código"), Field("eje", "Eje estratégico", "combo", c.ejes_display),
+                Field("codigo", "Código"),
+                Field("eje", "1) Eje estratégico", "combo", c.ejes_display),
+                Field("obj_poa", "2) Objetivo anual del POA (del eje)", "combo",
+                      lambda: c.objs_por_eje(self.mform.value("eje")) if hasattr(self, "mform") else [],
+                      span=2, width=420),
+                Field("_oe", "3) OE del PEI (automático)", "calc", span=2, width=420, anchor="w"),
                 Field("nombre", "Nombre de la iniciativa", span=2, width=420),
                 Field("descripcion", "Descripción y justificación", "text", span=2, width=420),
                 Field("origen", "Origen", "combo", lambda: c.catalogo_values("ORIGEN")),
                 Field("directriz", "Directriz que atiende"),
-                Field("obj_poa", "Objetivo anual del POA", "combo", lambda: c.catalogo_values("OBJ", "both")),
-                Field("oe", "OE del PEI", "combo", lambda: c.catalogo_values("OE", "both")),
-                Field("ae", "AE del PEI", "combo", lambda: c.ae_por_oe(self.mform.value("oe") if hasattr(self, "mform")
-                                                                       else "")),
-                Field("indicador", "Indicador"), Field("unidad_medida", "Unidad de medida"),
+                Field("indicador", "Indicador"),
+                Field("unidad_medida", "Unidad de medida", "combo", c.unidades_medida()),
                 Field("linea_base", "Línea base"), Field("meta_anual", "Meta anual"), Field("t1", "T1"),
                 Field("t2", "T2"), Field("t3", "T3"),
                 Field("_control_meta", "Control de meta", "calc", width=120, anchor="center"),
@@ -1228,7 +1342,8 @@ class MasterDetailTab(ctk.CTkFrame):
                  ("_resultado", "Resultado (S/)", 115, "money"), ("_margen", "Margen", 70, "pct")]
         if self.kind == "INI":
             return [("codigo", "Código", 70), ("eje", "Eje estratégico", 160), ("nombre", "Nombre", 240),
-                    ("obj_poa", "OBJ POA", 70), ("oe", "OE", 50), ("ae", "AE", 55), ("meta_anual", "Meta", 60, "num"),
+                    ("obj_poa", "OBJ POA", 70), ("oe", "OE", 50), ("unidad_medida", "U. medida", 90),
+                    ("meta_anual", "Meta", 60, "num"),
                     ("_control_meta", "Control meta", 90), ("responsable", "Responsable", 150),
                     ("prioridad", "Prior.", 50, "int"), *money]
         if self.kind == "OO":
@@ -1247,13 +1362,10 @@ class MasterDetailTab(ctk.CTkFrame):
         c = self.c
         tipos = self.cfg["tipos"]
         f = [Field("tipo", "Tipo", "combo", tipos),
-             Field("partida", "Partida / rubro", "search", lambda: c.partidas(self.dform.value("tipo") or tipos[0]),
-                   width=300)]
-        if self.cfg["gg"]:
-            f.append(Field("partida_gg", "Partida / rubro GG", "combo_free",
-                           lambda: c.partidas_gg((self.dform.value("tipo") if hasattr(self, "dform") else "")
-                                                 or "Egresos")))
-        f += [Field("_categoria", "Categoría", "calc", width=200, anchor="w"),
+             Field("partida", "Partida", "partida", lambda: c.partidas_gg(self._tipo_detalle()), width=300,
+                   describe=lambda v: c.descripcion_partida(v, self._tipo_detalle())),
+             Field("_desc_partida", "Descripción orientativa", "calc", span=2, width=420, anchor="w"),
+             Field("_categoria", "Categoría", "calc", width=200, anchor="w"),
               Field("descripcion", "Descripción del bien o servicio", "text", span=2, width=420,
                     height=70 if self.kind == "INV" else 45),
               Field("cantidad", "Cantidad"), Field("moneda", "Moneda", "combo", ["S/", "US$"]),
@@ -1262,6 +1374,11 @@ class MasterDetailTab(ctk.CTkFrame):
               Field("sustento", "Sustento", "combo", lambda: self._sustentos()),
               Field("observaciones", "Observaciones", span=2, width=420)]
         return f
+
+    def _tipo_detalle(self) -> str:
+        if hasattr(self, "dform"):
+            return self.dform.value("tipo") or self.cfg["tipos"][0]
+        return self.cfg["tipos"][0]
 
     def _sustentos(self) -> list[str]:
         tipo = self.dform.value("tipo") if hasattr(self, "dform") else ""
@@ -1317,11 +1434,11 @@ class MasterDetailTab(ctk.CTkFrame):
         data = dict(m)
         if self.kind == "INI":
             data["eje"] = self.c.eje_display(m["eje"])
-            for key, cat in (("obj_poa", "OBJ"), ("oe", "OE")):
-                data[key] = next((v for v in self.c.catalogo_values(cat, "both") if code_display(v) == m[key]), m[key])
+            objs = self.c.objs_por_eje(data["eje"])
+            self.mform.set_combo_values("obj_poa", objs)
+            data["obj_poa"] = next((v for v in objs if code_display(v) == m["obj_poa"]), m["obj_poa"])
             data["prioridad"] = next((v for v in self.c.catalogo_values("PRIORIDAD", "both")
                                       if code_display(v) == s(m["prioridad"])), s(m["prioridad"]))
-            self.mform.set_combo_values("ae", self.c.ae_por_oe(m["oe"]))
         elif self.kind == "OO":
             data["categoria"] = next((v for v in self.c.catalogo_values("CAT_OO", "both")
                                       if v.split(" · ", 1)[-1] == m["categoria"]), m["categoria"])
@@ -1337,14 +1454,20 @@ class MasterDetailTab(ctk.CTkFrame):
     def _master_changed(self):
         if self.kind == "INI":
             d = self.mform.get()
-            self.mform.set_combo_values("ae", self.c.ae_por_oe(d.get("oe", "")))
-            if d.get("ae") and d.get("oe") and code_display(d["ae"]) not in self.c.ae_por_oe(d["oe"]):
-                self.mform.set_value("ae", "")
-            if d.get("obj_poa") and not d.get("oe"):
+            # Eje → Objetivos anuales del POA de ese eje → OE del PEI automático
+            objs = self.c.objs_por_eje(d.get("eje", ""))
+            self.mform.set_combo_values("obj_poa", objs)
+            if d.get("obj_poa") and code_display(d["obj_poa"]) not in [code_display(o) for o in objs]:
+                self.mform.set_value("obj_poa", "")
+                d["obj_poa"] = ""
+            if d.get("obj_poa"):
                 oe = self.c.oe_de_obj(d["obj_poa"])
-                if oe:
-                    self.mform.set_value("oe", next((v for v in self.c.catalogo_values("OE", "both")
-                                                     if code_display(v) == oe), oe))
+                self.mform.set_value("_oe", (self.c.oe_display(oe) if oe else "(objetivo sin OE vinculado)",
+                                             "gray20" if oe else COLOR_WARN))
+            elif d.get("eje") and not objs:
+                self.mform.set_value("_oe", ("El eje no tiene objetivos anuales vinculados (ver Catálogos)", COLOR_WARN))
+            else:
+                self.mform.set_value("_oe", ("Seleccione el eje y luego el objetivo anual", "gray45"))
             self.mform.set_value("_control_meta", control_meta(dict(d, nombre=d.get("nombre") or "x")))
         elif self.kind == "AP":
             from controllers import parse_pct
@@ -1445,6 +1568,15 @@ class MasterDetailTab(ctk.CTkFrame):
         d = self._detail_row_from_form()
         tipo = d.get("tipo") or self.cfg["tipos"][0]
         cc = calc_detalle(d, self.c.params)
+        opciones = self.c.partidas_gg(tipo)
+        self.dform.set_combo_values("partida", opciones)
+        if d.get("partida") and d["partida"] not in opciones:
+            nuevo = self.c.a_partida_gg(d["partida"], tipo)
+            self.dform.set_value("partida", nuevo if nuevo in opciones else "")
+            d["partida"] = self.dform.value("partida")
+        desc = self.c.descripcion_partida(d.get("partida", ""), tipo) if d.get("partida") else ""
+        self.dform.set_value("_desc_partida", (desc or "Seleccione la Partida (🔍 para buscar con descripción)",
+                                               "gray20" if desc else "gray45"))
         cat = self.c.categoria_de(d.get("partida", ""), tipo)
         self.dform.set_value("_categoria", (cat or ("(partida fuera del catálogo)" if d.get("partida") else ""),
                                             "gray20" if cat else COLOR_WARN))
@@ -1454,8 +1586,6 @@ class MasterDetailTab(ctk.CTkFrame):
         self.dcalc.set_value("_prog", (fmt_money(cc["programado"]), "gray20"))
         self.dcalc.set_value("_control", cc["control"])
         self.dform.set_combo_values("sustento", self._sustentos())
-        if self.cfg["gg"]:
-            self.dform.set_combo_values("partida_gg", self.c.partidas_gg(tipo))
 
     def load_detail(self, did):
         if did is None:
@@ -1484,7 +1614,7 @@ class MasterDetailTab(ctk.CTkFrame):
             raise ValueError("Seleccione o guarde primero el registro maestro.")
         d = self._detail_row_from_form()
         if not d.get("partida"):
-            raise ValueError("Seleccione la Partida / rubro del catálogo NIIF.")
+            raise ValueError("Seleccione la Partida.")
         self.did = self.c.save_detalle(self.kind, self.mid, d, self.did)
         self.refresh()
         self.dtable.select(self.did)

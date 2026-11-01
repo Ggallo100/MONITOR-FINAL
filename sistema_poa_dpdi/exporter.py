@@ -24,7 +24,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-from catalogs_seed import CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN
+from catalogs_seed import CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN, UNIDADES_MEDIDA
 from controllers import POAController, fmt_money, fmt_pct, norm_key, s, to_float
 from database import MCOLS, MESES
 
@@ -147,10 +147,20 @@ class XL:
         for w in BAD_WORDS:
             self.ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=[w], fill=FILL_BAD))
 
-    def dv_list(self, rng: str, formula: str):
-        dv = DataValidation(type="list", formula1=formula, allow_blank=True, showErrorMessage=False)
+    def dv_list(self, rng: str, formula: str, prompt: str = ""):
+        # Excel guarda la fórmula de la lista sin el signo «=» inicial.
+        dv = DataValidation(type="list", formula1=formula.lstrip("="), allow_blank=True, showErrorMessage=False)
+        if prompt:
+            dv.promptTitle, dv.prompt, dv.showInputMessage = "Ayuda", prompt[:250], True
         self.ws.add_data_validation(dv)
         dv.add(rng)
+
+
+def gg_rows(db, tipo: str) -> list[dict]:
+    """Partidas GG de la base consolidada (una fila por partida: su cuenta NIIF principal)."""
+    return db.query("SELECT partida_gg, descripcion, categoria, codigo_niif, MIN(id) AS id FROM catalogo_niif_partidas "
+                    "WHERE tipo_flujo=? AND activo=1 AND partida_gg<>'' GROUP BY partida_gg "
+                    "ORDER BY partida_gg COLLATE NOCASE", (tipo,))
 
 
 def num_or_text(v: Any) -> Any:
@@ -334,12 +344,12 @@ class OfficialWorkbookExporter:
             r += 1
 
         def block(letter_title: str, headers: list[str], rows: list[tuple], key: str, start: int) -> int:
-            x.group(start, "B", "D", letter_title)
+            x.group(start, "B", "BCDE"[len(headers) - 1], letter_title)
             x.headers(start + 1, headers, 2)
             rr = start + 2
             for t in rows:
                 for j, v in enumerate(t):
-                    x.put(f"{'BCD'[j]}{rr}", v, "input")
+                    x.put(f"{'BCDE'[j]}{rr}", v, "input")
                 rr += 1
             self.P[key] = (start + 2, max(start + 2, rr - 1))
             return rr + 1
@@ -348,11 +358,9 @@ class OfficialWorkbookExporter:
         r = block("E. Objetivos estratégicos del PEI", ["Código", "Descripción del objetivo estratégico",
                                                         "Indicador del PEI asociado"],
                   [(o["codigo"], o["descripcion"], o["extra"]) for o in db.catalogo("OE")], "oe", r + 1)
-        r = block("F. Acciones estratégicas del PEI", ["Código de AE", "OE al que pertenece",
-                                                       "Descripción de la acción estratégica"],
-                  [(o["codigo"], o["padre"], o["descripcion"]) for o in db.catalogo("AE")], "ae", r)
-        r = block("G. Objetivos anuales del POA", ["Código", "Objetivo anual del POA", "OE del PEI al que contribuye"],
-                  [(o["codigo"], o["descripcion"], o["padre"]) for o in db.catalogo("OBJ")], "obj", r)
+        r = block("G. Objetivos anuales del POA (dependen del eje; el OE del PEI se asigna automáticamente)",
+                  ["Código", "Objetivo anual del POA", "OE del PEI al que contribuye", "Eje estratégico"],
+                  [(o["codigo"], o["descripcion"], o["padre"], o["eje"]) for o in db.catalogo("OBJ")], "obj", r)
         r = block("H. Ejes de las iniciativas con impacto estratégico", ["Código", "Eje estratégico",
                                                                           "Alcance referencial"],
                   [(o["codigo"], o["descripcion"], o["extra"]) for o in db.catalogo("EJE")], "eje", r)
@@ -372,9 +380,10 @@ class OfficialWorkbookExporter:
                   [(o["codigo"], o["extra"], "") for o in db.catalogo("TIPO_INV")], "tipo_inv", r)
         gg = []
         for tipo in ("Egresos", "Inversion", "Ingresos"):
-            for g in db.query("SELECT * FROM catalogo_partidas_gg WHERE tipo=? ORDER BY id", (tipo,)):
+            for g in gg_rows(db, tipo):
                 gg.append((g["partida_gg"], g["descripcion"], g["codigo_niif"] if tipo == "Inversion" else tipo))
-        r = block("N. Partidas / rubros presupuestales", ["Partida", "Descripción", "Observación"], gg, "gg", r)
+        r = block("N. Partidas (Partidas GG de la base consolidada Cuentas NIIF + Partidas GG)",
+                  ["Partida", "Descripción orientativa", "Observación"], gg, "gg", r)
         g0 = self.P["gg"][0]
         n_e = sum(1 for t in gg if t[2] == "Egresos")
         n_v = sum(1 for t in gg if t[2] not in ("Egresos", "Ingresos"))
@@ -428,6 +437,27 @@ class OfficialWorkbookExporter:
         for i, v in enumerate(sust):
             x.put(f"H{6 + i}", v, "plain")
         self.P["h6_sust"] = (6, 5 + len(sust))
+        # Partidas (GG) con su categoría, descripción orientativa y cuenta NIIF principal
+        x.headers(5, ["Partida (GG)", "Categoría", "Descripción orientativa", "Código NIIF"], 9)
+        x.widths({"I": 44, "J": 30, "K": 60, "L": 14, "N": 30, "O": 12, "P": 10, "Q": 44})
+        r = 6
+        for tipo in ("Egresos", "Ingresos", "Inversion"):
+            for g in gg_rows(self.c.db, tipo):
+                for c_, v in (("I", g["partida_gg"]), ("J", g["categoria"]), ("K", g["descripcion"]),
+                              ("L", g["codigo_niif"])):
+                    x.put(f"{c_}{r}", v, "plain")
+                r += 1
+        self.P["h6_gg"] = (6, max(6, r - 1))
+        # Relación de dependencia: Eje estratégico → Objetivo anual del POA → OE del PEI
+        x.headers(5, ["Eje estratégico", "Objetivo anual POA", "OE del PEI", "Descripción del objetivo"], 14)
+        ejes = {e["codigo"]: e["descripcion"] for e in self.c.db.catalogo("EJE")}
+        objs = sorted(self.c.db.catalogo("OBJ"), key=lambda o: (ejes.get(o["eje"], "~"), o["codigo"]))
+        r = 6
+        for o in objs:
+            for c_, v in (("N", ejes.get(o["eje"], "")), ("O", o["codigo"]), ("P", o["padre"]), ("Q", o["descripcion"])):
+                x.put(f"{c_}{r}", v, "plain")
+            r += 1
+        self.P["h6_obj"] = (6, max(6, r - 1))
 
     def _names(self, wb):
         P = self.P
@@ -447,7 +477,7 @@ class OfficialWorkbookExporter:
         add("Reajuste", "Parámetros!$C$25")
         add("MesReajuste", "Parámetros!$C$26")
         add("Morosidad", "Parámetros!$C$27")
-        for name, key, c in (("L_OE", "oe", "B"), ("L_AE", "ae", "B"), ("L_ObjPOA", "obj", "B"),
+        for name, key, c in (("L_OE", "oe", "B"), ("L_ObjPOA", "obj", "B"),
                              ("L_Ejes", "eje", "C"), ("L_CatFE", "cat_fe", "C"), ("L_ConcFI", "conc_fi", "C"),
                              ("L_CatOO", "cat_oo", "C"), ("L_TipoAP", "tipo_ap", "B"), ("L_TipoINV", "tipo_inv", "B"),
                              ("L_Partidas", "gg", "B"), ("L_Origen", "origen", "B"), ("L_Sustento", "sust", "B"),
@@ -459,48 +489,71 @@ class OfficialWorkbookExporter:
         add("Inversion", f"Hoja6!$E${P['h6_inv'][0]}:$E${P['h6_inv'][1]}")
         add("L_PartidasNIIF", f"Hoja6!$F${P['h6_all'][0]}:$F${P['h6_all'][1]}")
         add("L_SustAll", f"Hoja6!$H${P['h6_sust'][0]}:$H${P['h6_sust'][1]}")
-        fr, lr, _ = self.L["INI"]
-        add("L_INI", f"Iniciativas!$A${fr}:$A${lr}")
+        a, b = P["h6_gg"]
+        add("L_GGInfo", f"Hoja6!$I${a}:$L${b}")
+        a, b = P["h6_obj"]
+        add("L_ObjEje", f"Hoja6!$N${a}:$N${b}")
+        add("L_ObjCod", f"Hoja6!$O${a}:$O${b}")
+        add("L_ObjOE", f"Hoja6!$O${a}:$P${b}")
+        for name, sheet, key in (("L_INI", "Iniciativas", "INI"), ("L_OO", "Otras_Operat", "OO"),
+                                 ("L_AP", "Act_Prop", "AP"), ("L_INV", "Inversion", "INV")):
+            fr, lr, _ = self.L[key]
+            add(name, f"{sheet}!$A${fr}:$A${lr}")
 
-    def _cat_formula(self, ref: str) -> str:
+    def _cat_formula(self, ref: str, cuenta: bool = False) -> str:
+        """Categoría. Detalles: por Partida (GG) y, si no existe, por cuenta NIIF.
+        Funcionamiento (cuenta=True): por cuenta NIIF, como la hoja oficial."""
         a, b = self.P["h6_all"]
-        return f'=IFERROR(VLOOKUP({ref},Hoja6!$F${a}:$G${b},2,FALSE),"")'
+        por_cuenta = f'VLOOKUP({ref},Hoja6!$F${a}:$G${b},2,FALSE)'
+        if cuenta:
+            return f'=IF({ref}="","",IFERROR({por_cuenta},""))'
+        return f'=IF({ref}="","",IFERROR(VLOOKUP({ref},L_GGInfo,2,FALSE),IFERROR({por_cuenta},"")))'
+
+    @staticmethod
+    def _desc_formula(ref: str) -> str:
+        return f'=IF({ref}="","",IFERROR(VLOOKUP({ref},L_GGInfo,3,FALSE),""))'
 
     # --------------------------------------------------------- Iniciativas
+    # Columnas: A Código · B Eje · C Nombre · D Descripción · E Origen · F Directriz · G Objetivo anual del POA
+    # (lista dependiente del eje) · H OE del PEI (automático) · I Indicador · J Unidad de medida · K Línea base
+    # · L Meta anual · M–O T1–T3 · P Control de meta · Q Responsable · R Prioridad · S Ingresos · T Gasto
+    # · U Resultado · V Margen · W Observaciones de la DPDI
     def _iniciativas(self, ws):
         x = XL(ws)
         x.title("1. INICIATIVAS CON IMPACTO ESTRATÉGICO",
-                "Iniciativas cuya realización impacta en los objetivos anuales del POA. Una fila por iniciativa; el "
-                "gasto corriente se calcula desde Detalle_Iniciativas y la inversión vinculada desde Inversion.")
-        x.group(5, "A", "I", "Identificación y alineamiento (POA y PEI)")
-        x.group(5, "J", "Q", "Indicador y meta física")
-        x.group(5, "R", "S", "Gestión")
-        x.group(5, "T", "W", "Presupuesto (calculado)")
-        x.group(5, "X", "X", "Revisión")
+                "Seleccione primero el Eje estratégico; el Objetivo anual del POA se elige entre los objetivos de ese eje "
+                "y el OE del PEI se completa automáticamente. El gasto corriente se calcula desde Detalle_Iniciativas.")
+        x.group(5, "A", "H", "Identificación y alineamiento (Eje → Objetivo anual POA → OE PEI)")
+        x.group(5, "I", "P", "Indicador y meta física")
+        x.group(5, "Q", "R", "Gestión")
+        x.group(5, "S", "V", "Presupuesto (calculado)")
+        x.group(5, "W", "W", "Revisión")
         x.headers(6, ["Código", "Eje estratégico", "Nombre de la iniciativa", "Descripción y justificación", "Origen",
-                      "Directriz que atiende", "Objetivo anual del POA", "OE del PEI", "AE del PEI", "Indicador",
+                      "Directriz que atiende", "Objetivo anual del POA", "OE del PEI (automático)", "Indicador",
                       "Unidad de medida", "Línea base", "Meta anual", "T1", "T2", "T3", "Control de meta",
                       "Responsable", "Prioridad (1–4)", "Ingresos Total (S/)", "Gasto corriente (S/)",
                       "Resultado (S/)", "Margen (%)", "Observaciones de la DPDI"])
-        x.widths({"A": 10, "B": 22, "C": 34, "D": 44, "E": 24, "F": 14, "G": 12, "H": 10, "I": 10, "J": 30, "K": 14,
-                  "L": 10, "M": 10, "N": 8, "O": 8, "P": 8, "Q": 12, "R": 26, "S": 10, "T": 14, "U": 14, "V": 14,
-                  "W": 10, "X": 30})
+        x.widths({"A": 10, "B": 24, "C": 34, "D": 44, "E": 24, "F": 14, "G": 12, "H": 12, "I": 30, "J": 15,
+                  "K": 10, "L": 10, "M": 8, "N": 8, "O": 8, "P": 12, "Q": 26, "R": 10, "S": 14, "T": 14, "U": 14,
+                  "V": 10, "W": 30})
         dfr, dlr, _ = self.L["DET_INI"]
         fr, lr, tr = self.L["INI"]
 
         def formulas(r, det_a, det_b, kind):
-            x.put(f"Q{r}", f'=IF(C{r}="","",IF(M{r}="","Sin meta",IF(SUM(N{r}:P{r})=M{r},"OK","Revisar")))', kind)
-            for colx, tipo in (("T", "Ingresos"), ("U", "Egresos")):
+            x.put(f"H{r}", f'=IF(G{r}="","",IFERROR(VLOOKUP(G{r},L_ObjOE,2,FALSE),"Objetivo no existe"))',
+                  "link" if kind == "calc" else kind)
+            x.put(f"P{r}", f'=IF(C{r}="","",IF(L{r}="","Sin meta",IF(SUM(M{r}:O{r})=L{r},"OK","Revisar")))', kind)
+            for colx, tipo in (("S", "Ingresos"), ("T", "Egresos")):
                 x.put(f"{colx}{r}", f"=SUMIFS(Detalle_Iniciativas!$L${det_a}:$L${det_b},Detalle_Iniciativas!$A${det_a}"
                                     f":$A${det_b},$A{r},Detalle_Iniciativas!$C${det_a}:$C${det_b},\"{tipo}\")",
                       kind, MONEY)
-            x.put(f"V{r}", f"=T{r}-U{r}", kind, MONEY)
-            x.put(f"W{r}", f'=IF(T{r}=0,"",V{r}/T{r})', kind, PCT)
+            x.put(f"U{r}", f"=S{r}-T{r}", kind, MONEY)
+            x.put(f"V{r}", f'=IF(S{r}=0,"",U{r}/S{r})', kind, PCT)
 
         ex = ["EJEMPLO", "Transformación Digital", "Implementación de aulas virtuales con analítica de aprendizaje",
               "Ampliar el uso de aulas virtuales para mejorar el seguimiento del aprendizaje; responde a la debilidad "
-              "D3 del FODA.", "Diagnóstico estratégico (FODA)", "DE-02", "OBJ-03", "OE3", "AE3.1",
-              "Cursos con aula virtual implementada", "Curso", 20, 60, 10, 20, 20, None,
+              "D3 del FODA.", "Diagnóstico estratégico (FODA)", "DE-02", "OBJ-06", None,
+              "Cursos con aula virtual implementada", "Unidad", 20, 60, 10, 20, 30, None,
               "Jefe de Tecnologías Educativas", 2]
         for i, v in enumerate(ex):
             if v is not None:
@@ -511,32 +564,29 @@ class OfficialWorkbookExporter:
         for i, r in enumerate(range(fr, lr + 1)):
             m = recs[i] if i < len(recs) else None
             if m:
-                vals = [m["codigo"], m["eje"], m["nombre"], m["descripcion"], m["origen"], m["directriz"],
-                        m["obj_poa"], m["oe"], m["ae"], m["indicador"], m["unidad_medida"],
-                        to_float(m["linea_base"]) if to_float(m["linea_base"]) is not None else m["linea_base"],
-                        m["meta_anual"], m["t1"], m["t2"], m["t3"]]
-                for j, v in enumerate(vals):
-                    x.put(f"{col(j + 1)}{r}", v if v != "" else None, "input")
-                x.put(f"R{r}", m["responsable"] or None, "input")
-                x.put(f"S{r}", m["prioridad"], "input")
-                x.put(f"X{r}", m["observaciones"] or None, "input")
+                vals = {"A": m["codigo"], "B": m["eje"], "C": m["nombre"], "D": m["descripcion"], "E": m["origen"],
+                        "F": m["directriz"], "G": m["obj_poa"], "I": m["indicador"], "J": m["unidad_medida"],
+                        "K": to_float(m["linea_base"]) if to_float(m["linea_base"]) is not None else m["linea_base"],
+                        "L": m["meta_anual"], "M": m["t1"], "N": m["t2"], "O": m["t3"], "Q": m["responsable"],
+                        "R": m["prioridad"], "W": m["observaciones"]}
             else:
                 nxt += 1
-                x.put(f"A{r}", f"INI-{nxt:02d}", "input")
-                for j in list(range(2, 17)) + [18, 19, 24]:
-                    x.put(f"{col(j)}{r}", None, "input")
+                vals = {"A": f"INI-{nxt:02d}"}
+            for c_ in "ABCDEFGIJKLMNOQRW":
+                v = vals.get(c_)
+                x.put(f"{c_}{r}", v if v != "" else None, "input")
             formulas(r, dfr, dlr, "calc")
         x.put(f"A{tr}", "TOTAL INICIATIVAS CON IMPACTO ESTRATÉGICO (no incluye la fila de ejemplo)", "total")
-        ws.merge_cells(f"A{tr}:S{tr}")
-        for c_ in "TUV":
+        ws.merge_cells(f"A{tr}:R{tr}")
+        for c_ in "STU":
             x.put(f"{c_}{tr}", f"=SUM({c_}{fr}:{c_}{lr})", "total", MONEY)
-        x.dv_list(f"B{fr}:B{lr}", "=L_Ejes")
-        x.dv_list(f"E{fr}:E{lr}", "=L_Origen")
-        x.dv_list(f"G{fr}:G{lr}", "=L_ObjPOA")
-        x.dv_list(f"H{fr}:H{lr}", "=L_OE")
-        x.dv_list(f"I{fr}:I{lr}", "=L_AE")
-        x.dv_list(f"S{fr}:S{lr}", '"1,2,3,4"')
-        x.status_cf(f"Q7:Q{lr}")
+        x.dv_list(f"B{fr}:B{lr}", "L_Ejes", "1) Seleccione el eje estratégico.")
+        x.dv_list(f"E{fr}:E{lr}", "L_Origen")
+        x.dv_list(f"G{fr}:G{lr}", f"OFFSET(L_ObjCod,MATCH($B{fr},L_ObjEje,0)-1,0,MAX(1,COUNTIF(L_ObjEje,$B{fr})),1)",
+                  "2) Objetivos anuales del eje elegido. El OE del PEI se completa solo.")
+        x.dv_list(f"J{fr}:J{lr}", '"' + ",".join(UNIDADES_MEDIDA) + '"')
+        x.dv_list(f"R{fr}:R{lr}", '"1,2,3,4"')
+        x.status_cf(f"P7:P{lr}")
 
     # ------------------------------------------------- Detalle_Iniciativas
     def _det_iniciativas(self, ws):
@@ -548,11 +598,12 @@ class OfficialWorkbookExporter:
         x.group(5, "E", "L", "Bien o servicio y costo")
         x.group(5, "M", "X", "Distribución mensual del monto (S/)")
         x.group(5, "Y", "AB", "Control y sustento")
-        x.headers(6, ["Código de iniciativa", "Nombre de la iniciativa", "Tipo", "Partida / rubro",
-                      "Partida / rubro GG", "Categoría", "Descripción del bien o servicio", "Cantidad", "Moneda",
+        x.headers(6, ["Código de iniciativa", "Nombre de la iniciativa", "Tipo", "Partida",
+                      "Descripción orientativa de la partida", "Categoría", "Descripción del bien o servicio",
+                      "Cantidad", "Moneda",
                       "Costo unitario (moneda)", "Costo unitario (S/)", "Total (S/)", *MESES, "Programado (S/)",
                       "Control de distribución", "Sustento", "Observaciones"])
-        x.widths({"A": 11, "B": 30, "C": 10, "D": 34, "E": 30, "F": 22, "G": 40, "H": 9, "I": 7, "J": 13, "K": 13,
+        x.widths({"A": 11, "B": 30, "C": 10, "D": 34, "E": 46, "F": 22, "G": 40, "H": 9, "I": 7, "J": 13, "K": 13,
                   "L": 14, **{col(13 + i): 11 for i in range(12)}, "Y": 14, "Z": 12, "AA": 20, "AB": 30})
         fr, lr, tr = self.L["DET_INI"]
         ifr, ilr, _ = self.L["INI"]
@@ -561,6 +612,7 @@ class OfficialWorkbookExporter:
             if not ex:
                 x.put(f"B{r}", f'=IF(A{r}="","",IFERROR(INDEX(Iniciativas!$C$7:$C${ilr},MATCH(A{r},'
                                f'Iniciativas!$A$7:$A${ilr},0))&"","Código no existe"))', "link")
+            x.put(f"E{r}", self._desc_formula(f"D{r}"), "link" if kind == "calc" else kind)
             x.put(f"F{r}", self._cat_formula(f"D{r}"), "link" if kind == "calc" else kind)
             x.put(f"K{r}", f'=IF(J{r}="","",IF(I{r}="US$",J{r}*TC,J{r}))', kind, MONEY)
             x.put(f"L{r}", f'=IF(OR(H{r}="",K{r}=""),0,H{r}*K{r})', kind, MONEY)
@@ -568,14 +620,14 @@ class OfficialWorkbookExporter:
             x.put(f"Z{r}", f'=IF(AND(L{r}=0,Y{r}=0),"",IF(ABS(Y{r}-L{r})<0.01,"OK","Revisar"))', kind)
 
         for c_, v in (("A", "EJEMPLO"), ("B", "Renovación Licencia Educativa"), ("C", "Egresos"),
-                      ("D", "LICENCIAS Y DERECHOS DE VIGENCIA"), ("E", "Licencias y derechos de vigencia"),
+                      ("D", "Licencias y derechos de vigencia"),
                       ("G", "Licencia anual de plataforma de analítica de aprendizaje"), ("H", 1), ("I", "S/"),
                       ("J", 12000), ("O", 6000), ("T", 6000), ("AA", "Cotización"),
                       ("AB", "Pago en dos armadas (marzo y agosto).")):
             x.put(f"{c_}7", v, "example")
         formulas(7, "example", ex=True)
         rows = [(m, dd) for m in self.d["INI"] for dd in m["_detalle"]]
-        self._detail_rows(x, rows, fr, lr, formulas, letters=dict(code="A", tipo="C", partida="D", gg="E",
+        self._detail_rows(x, rows, fr, lr, formulas, letters=dict(code="A", tipo="C", partida="D",
                                                                      desc="G", cant="H", mon="I", cu="J", m0="M",
                                                                      sust="AA", obs="AB"))
         x.put(f"A{tr}", "TOTAL (no incluye la fila de ejemplo)", "total")
@@ -583,10 +635,10 @@ class OfficialWorkbookExporter:
         for i in range(14):
             c_ = col(12 + i)
             x.put(f"{c_}{tr}", f"=SUM({c_}{fr}:{c_}{lr})", "total", MONEY)
-        x.dv_list(f"A{fr}:A{lr}", "=L_INI")
+        x.dv_list(f"A{fr}:A{lr}", "L_INI")
         x.dv_list(f"C{fr}:C{lr}", '"Ingresos,Egresos"')
-        x.dv_list(f"D{fr}:D{lr}", "=L_PartidasNIIF")
-        x.dv_list(f"E{fr}:E{lr}", "=L_Partidas")
+        x.dv_list(f"D{fr}:D{lr}", f'IF($C{fr}="Ingresos",Ingresos,Egresos)',
+                  "Seleccione la Partida; su descripción orientativa aparece en la columna E.")
         x.dv_list(f"I{fr}:I{lr}", '"S/,US$"')
         x.dv_list(f"AA{fr}:AA{lr}", "=L_SustAll")
         x.status_cf(f"Z7:Z{lr}")
@@ -638,7 +690,7 @@ class OfficialWorkbookExporter:
         fr, lr, tr = self.L["FI"]
 
         def formulas(r, kind):
-            x.put(f"C{r}", self._cat_formula(f"B{r}"), "link" if kind == "calc" else kind)
+            x.put(f"C{r}", self._cat_formula(f"B{r}", cuenta=True), "link" if kind == "calc" else kind)
             x.put(f"G{r}", f'=IF(F{r}="","",IF(E{r}="US$",F{r}*TC,F{r}))', kind, MONEY)
             x.put(f"V{r}", f'=IF(OR($D{r}="",$G{r}=""),0,$D{r}*$G{r}*(COUNTIF(J{r}:U{r},"x")+SUMIF(J{r}:U{r},">0")))',
                   kind, MONEY)
@@ -707,7 +759,7 @@ class OfficialWorkbookExporter:
         fr, lr, tr = self.L["FE"]
 
         def formulas(r, kind):
-            x.put(f"C{r}", self._cat_formula(f"B{r}"), "link" if kind == "calc" else kind)
+            x.put(f"C{r}", self._cat_formula(f"B{r}", cuenta=True), "link" if kind == "calc" else kind)
             x.put(f"G{r}", f'=IF(F{r}="","",IF(E{r}="US$",F{r}*TC,F{r}))', kind, MONEY)
             x.put(f"H{r}", f'=IF(OR(D{r}="",G{r}=""),0,G{r}*D{r})', kind, MONEY)
             x.put(f"V{r}", f'=COUNTIF(J{r}:U{r},"x")+COUNTIF(J{r}:U{r},">0")', kind, INT)
@@ -818,11 +870,11 @@ class OfficialWorkbookExporter:
         else:
             h_code, h_name, h_cu, h_cus = ("Código", "Nombre de la iniciativa", "Ingresoss o Costo unitario (moneda)",
                                            "Ingresos o   Costo unitario  (S/)")
-        x.headers(6, [h_code, h_name, "Tipo", "Partida / rubro", "Categoría", "Descripción del bien o servicio",
+        x.headers(6, [h_code, h_name, "Tipo", "Partida", "Categoría", "Descripción del bien o servicio",
                       "Cantidad", "Moneda", h_cu, h_cus, "Total (S/)", *MESES, "Programado (S/)",
-                      "Control de distribución", "Sustento", "Observaciones"])
+                      "Control de distribución", "Sustento", "Observaciones", "Descripción orientativa de la partida"])
         x.widths({"A": 10, "B": 32, "C": 10, "D": 36, "E": 22, "F": 40, "G": 9, "H": 7, "I": 14, "J": 14, "K": 14,
-                  **{col(12 + i): 11 for i in range(12)}, "X": 14, "Y": 12, "Z": 22, "AA": 30})
+                  **{col(12 + i): 11 for i in range(12)}, "X": 14, "Y": 12, "Z": 22, "AA": 30, "AB": 50})
         fr, lr, tr = self.L[key]
         mlr = self.L[kind][1]
         mname = "C"
@@ -832,6 +884,7 @@ class OfficialWorkbookExporter:
                 x.put(f"B{r}", f'=IF(A{r}="","",IFERROR(INDEX({master_sheet}!${mname}$7:${mname}${mlr},MATCH(A{r},'
                                f'{master_sheet}!$A$7:$A${mlr},0))&"","Código no existe"))', "link")
             x.put(f"E{r}", self._cat_formula(f"D{r}"), "link" if k == "calc" else k)
+            x.put(f"AB{r}", self._desc_formula(f"D{r}"), "link" if k == "calc" else k)
             x.put(f"J{r}", f'=IF(I{r}="","",IF(H{r}="US$",I{r}*TC,I{r}))', k, MONEY)
             x.put(f"K{r}", f'=IF(OR(G{r}="",J{r}=""),0,G{r}*J{r})', k, MONEY)
             x.put(f"X{r}", f"=SUM(L{r}:W{r})", k, MONEY)
@@ -842,7 +895,7 @@ class OfficialWorkbookExporter:
                 {"A": "EJEMPLO", "B": "Licencias Software Estadístico", "C": "Ingresos", "D": "PENSION PEA",
                  "F": "Recaudación pensión", "G": 2, "H": "S/", "I": 1200, "N": 1200, "S": 1200, "Z": "Histórico de recaudación",
                  "AA": "Cobro en dos armadas (marzo y agosto)."},
-                {"A": "EJEMPLO", "B": "Licencias Software Estadístico", "C": "Egresos", "D": "CORREOS",
+                {"A": "EJEMPLO", "B": "Licencias Software Estadístico", "C": "Egresos", "D": "Correos",
                  "F": "Licencia mensual mensajería correos", "G": 12, "H": "S/", "I": 60,
                  **{col(12 + k): 60 for k in range(12)}, "Z": "Cotización", "AA": "Pago en doce meses (ene-dic)"},
             ]
@@ -853,7 +906,7 @@ class OfficialWorkbookExporter:
                  "I": 50, "N": 5000, "S": 2500, "Z": "Tarifario institucional vigente",
                  "AA": "Cobro en dos armadas (marzo y agosto)."},
                 {"A": "EJEMPLO", "B": "Seminario internacional de innovación educativa", "C": "Egresos",
-                 "D": "SERVICIO DESARROLLO DE TALLERES", "F": "Pago ponencia", "G": 3, "H": "S/", "I": 250, "N": 500,
+                 "D": "Servicio desarrollo de talleres", "F": "Pago ponencia", "G": 3, "H": "S/", "I": 250, "N": 500,
                  "S": 250, "Z": "Cotización", "AA": "Pago en dos armadas (marzo y agosto)."},
             ]
         for i, exr in enumerate(ex_rows):
@@ -868,10 +921,10 @@ class OfficialWorkbookExporter:
         for i in range(14):
             c_ = col(11 + i)
             x.put(f"{c_}{tr}", f"=SUM({c_}{fr}:{c_}{lr})", "total", MONEY)
-        a, b = self.L[kind][0], self.L[kind][1]
-        x.dv_list(f"A{fr}:A{lr}", f"={master_sheet}!$A${a}:$A${b}")
+        x.dv_list(f"A{fr}:A{lr}", f"L_{kind}")
         x.dv_list(f"C{fr}:C{lr}", '"Ingresos,Egresos"')
-        x.dv_list(f"D{fr}:D{lr}", "=L_PartidasNIIF")
+        x.dv_list(f"D{fr}:D{lr}", f'IF($C{fr}="Ingresos",Ingresos,Egresos)',
+                  "Seleccione la Partida; su descripción orientativa aparece en la última columna.")
         x.dv_list(f"H{fr}:H{lr}", '"S/,US$"')
         x.dv_list(f"Z{fr}:Z{lr}", "=L_SustAll")
         x.status_cf(f"Y7:Y{lr}")
@@ -1071,10 +1124,11 @@ class OfficialWorkbookExporter:
         x.group(5, "D", "J", "Bien o servicio y costo")
         x.group(5, "K", "V", "Distribución mensual del monto (S/)")
         x.group(5, "W", "Z", "Control y sustento")
-        x.headers(6, ["Código", "Nombre de la iniciativa", "Tipo", "Partida / rubro", "Descripción del bien o servicio",
+        x.headers(6, ["Código", "Nombre de la iniciativa", "Tipo", "Partida", "Descripción del bien o servicio",
                       "Cantidad", "Moneda", "Costo unitario (moneda)", "Costo unitario (S/)", "Total (S/)", *MESES,
-                      "Programado (S/)", "Control de distribución", "Sustento", "Observaciones"])
-        x.widths({"A": 10, "B": 34, "C": 10, "D": 36, "E": 56, "F": 9, "G": 7, "H": 14, "I": 14, "J": 14,
+                      "Programado (S/)", "Control de distribución", "Sustento", "Observaciones",
+                      "Descripción orientativa de la partida"])
+        x.widths({"AA": 50, "A": 10, "B": 34, "C": 10, "D": 36, "E": 56, "F": 9, "G": 7, "H": 14, "I": 14, "J": 14,
                   **{col(11 + i): 11 for i in range(12)}, "W": 14, "X": 12, "Y": 22, "Z": 30})
         fr, lr, tr = self.L["DET_INV"]
         ilr = self.L["INV"][1]
@@ -1086,6 +1140,7 @@ class OfficialWorkbookExporter:
             x.put(f"I{r}", f'=IF(H{r}="","",IF(G{r}="US$",H{r}*TC,H{r}))', k, MONEY)
             x.put(f"J{r}", f'=IF(OR(F{r}="",I{r}=""),0,F{r}*I{r})', k, MONEY)
             x.put(f"W{r}", f"=SUM(K{r}:V{r})", k, MONEY)
+            x.put(f"AA{r}", self._desc_formula(f"D{r}"), "link" if k == "calc" else k)
             x.put(f"X{r}", f'=IF(AND(J{r}=0,W{r}=0),"",IF(ABS(W{r}-J{r})<0.01,"OK","Revisar"))', k)
 
         for c_, v in (("A", "EJEMPLO"), ("B", "Renovación del laboratorio de cómputo 3"), ("C", "Inversion"),
@@ -1101,9 +1156,9 @@ class OfficialWorkbookExporter:
         for i in range(14):
             c_ = col(10 + i)
             x.put(f"{c_}{tr}", f"=SUM({c_}{fr}:{c_}{lr})", "total", MONEY)
-        a, b = self.L["INV"][0], self.L["INV"][1]
-        x.dv_list(f"A{fr}:A{lr}", f"=Inversion!$A${a}:$A${b}")
-        x.dv_list(f"D{fr}:D{lr}", "=Inversion")
+        x.dv_list(f"A{fr}:A{lr}", "L_INV")
+        x.dv_list(f"D{fr}:D{lr}", "Inversion", "Seleccione la Partida; su descripción orientativa aparece en la "
+                                               "última columna.")
         x.dv_list(f"G{fr}:G{lr}", '"S/,US$"')
         x.dv_list(f"Y{fr}:Y{lr}", "=L_Sustento")
         x.status_cf(f"X7:X{lr}")
@@ -1149,7 +1204,7 @@ class OfficialWorkbookExporter:
                     f'"Excede techo"))')
 
         lines = [
-            ("1. Iniciativas con impacto estratégico", f"=Iniciativas!$T${T('INI')}", f"=Iniciativas!$U${T('INI')}",
+            ("1. Iniciativas con impacto estratégico", f"=Iniciativas!$S${T('INI')}", f"=Iniciativas!$T${T('INI')}",
              "=TechoIniciativas"),
             ("2. Actividades de funcionamiento", f"=Funcionamiento_Ing!$AK${T('FI')}",
              f"=Funcionamiento_Egr!$AI${T('FE')}", "=TechoFuncionamiento"),
@@ -1287,9 +1342,9 @@ class OfficialWorkbookExporter:
             rr = r4 + i
             x.put(f"B{rr}", f"=Parámetros!C{e0 + i}", "link")
             x.put(f"C{rr}", f'=COUNTIFS({ib},B{rr},{ic},"<>")', "calc", INT)
-            x.put(f"D{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'T')},{ib},B{rr})", "calc", MONEY)
+            x.put(f"D{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'S')},{ib},B{rr})", "calc", MONEY)
             x.put(f"E{rr}", f'=IF($D${t4}=0,"",D{rr}/$D${t4})', "calc", PCT)
-            x.put(f"F{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'U')},{ib},B{rr})", "calc", MONEY)
+            x.put(f"F{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'T')},{ib},B{rr})", "calc", MONEY)
             x.put(f"G{rr}", f'=IF($F${t4}=0,"",F{rr}/$F${t4})', "calc", PCT)
             x.put(f"H{rr}", f"=D{rr}-F{rr}", "calc", MONEY)
         x.put(f"B{t4}", "Total", "total")
@@ -1400,15 +1455,15 @@ class OfficialWorkbookExporter:
         prios = self.c.db.catalogo("PRIORIDAD")
         t9 = r9 + len(prios)
         p0 = self.P["prio"][0]
-        isx = R("Iniciativas", "INI", "S")
+        isx = R("Iniciativas", "INI", "R")
         ve = R("Inversion", "INV", "E")
         for i, pr in enumerate(prios):
             rr = r9 + i
             x.put(f"B{rr}", int(pr["codigo"]), "label", INT)
             x.put(f"C{rr}", f"=Parámetros!C{p0 + i}", "link")
             x.put(f"D{rr}", f'=COUNTIFS({isx},B{rr},{ic},"<>")', "calc", INT)
-            x.put(f"E{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'T')},{isx},B{rr})", "calc", MONEY)
-            x.put(f"F{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'U')},{isx},B{rr})", "calc", MONEY)
+            x.put(f"E{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'S')},{isx},B{rr})", "calc", MONEY)
+            x.put(f"F{rr}", f"=SUMIFS({R('Iniciativas', 'INI', 'T')},{isx},B{rr})", "calc", MONEY)
             x.put(f"G{rr}", f"=E{rr}-F{rr}", "calc", MONEY)
             x.put(f"H{rr}", f'=COUNTIFS({ve},B{rr},{vd},">0")', "calc", INT)
             x.put(f"I{rr}", f"=SUMIFS({vd},{ve},B{rr})", "calc", MONEY)
@@ -1491,16 +1546,16 @@ class OfficialWorkbookExporter:
         AP = lambda c_: R("Act_Prop", "AP", c_)  # noqa: E731
         meses_fi = "+".join(f"({FI(col(10 + k))}<>\"\")" for k in range(12))
         reglas = [
-            ("DF-01", "Iniciativas sin objetivo anual del POA, OE o AE del PEI",
-             f'=SUMPRODUCT(({I_("C")}<>"")*((({I_("G")}="")+({I_("H")}="")+({I_("I")}=""))>0))'),
+            ("DF-01", "Iniciativas sin eje estratégico, objetivo anual del POA u OE del PEI",
+             f'=SUMPRODUCT(({I_("C")}<>"")*((({I_("B")}="")+({I_("G")}="")+({I_("H")}=""))>0))'),
             ("DF-02", "Iniciativas sin indicador, meta o responsable, o con programación trimestral que no suma la meta",
-             f'=SUMPRODUCT(({I_("C")}<>"")*((({I_("J")}="")+({I_("R")}="")+({I_("Q")}<>"OK"))>0))'),
+             f'=SUMPRODUCT(({I_("C")}<>"")*((({I_("I")}="")+({I_("Q")}="")+({I_("P")}<>"OK"))>0))'),
             ("DP-01", "Tipos de actividad que exceden su techo de egresos",
              f'=COUNTIF(H{s1_first}:H{s1_last},"Excede techo")+COUNTIF(H{s1_first}:H{s1_last},"Sin techo")'),
             ("DP-02", "Gasto de iniciativas sin código o con código inexistente, e iniciativas sin gasto registrado",
              "=" + sp(f'SUMPRODUCT(({DI("L")}>0)*({DI("A")}=""))', f'COUNTIF({DI("B")},"Código no existe")',
                       f'SUMPRODUCT(({DI("L")}>0)*({DI("A")}<>"")*({DI("B")}=""))',
-                      f'SUMPRODUCT(({I_("C")}<>"")*({I_("U")}=0))')),
+                      f'SUMPRODUCT(({I_("C")}<>"")*({I_("T")}=0))')),
             ("DP-03", "Egresos con monto y sin sustento (todas las hojas de egresos)",
              "=" + sp(f'SUMPRODUCT(({DI("L")}>0)*({DI("AA")}=""))', f'SUMPRODUCT(({FE("AI")}>0)*({FE("AK")}=""))',
                       f'SUMPRODUCT(({DO("K")}>0)*({DO("Z")}=""))', f'SUMPRODUCT(({DA("K")}>0)*({DA("Z")}=""))',
@@ -1867,4 +1922,228 @@ def export_pdf(ctrl: POAController, uid: int, path: str | Path) -> Path:
                             topMargin=1.0 * cm, bottomMargin=1.2 * cm,
                             title=f"Ficha Resumen POA {summary['anio']} - {u['codigo_area']}", author="DPDI")
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
+    return path
+
+
+# =============================================================================
+# 4. PLANTILLA DESCARGABLE DE PARÁMETROS Y CATÁLOGOS (actualización masiva)
+# =============================================================================
+def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
+    """Genera la plantilla Excel con los parámetros y catálogos vigentes, lista para editar y volver a importar.
+
+    Hojas: Instrucciones, Datos_Generales, Unidades_Techos, Cuentas_NIIF_Partidas_GG, Catalogos_Estrategicos,
+    Costos_Referencia, Plantilla_Funcionamiento y Listas (valores de las listas desplegables).
+    """
+    from catalogs_seed import BASES_CALCULO, MACROGRUPOS
+    from controllers import CATALOGOS_ESTRATEGICOS, PARAM_GENERALES, PARAM_PCT, PLANTILLA_PARAM
+
+    path = Path(path)
+    db = ctrl.db
+    prm = db.parametros()
+    unidades = ctrl.unidades()
+    wb = Workbook()
+    ws_i = wb.active
+    ws_i.title = "Instrucciones"
+    sheets = {name: wb.create_sheet(name) for name in PLANTILLA_PARAM}
+    ws_l = wb.create_sheet("Listas")
+    EXTRA = 300  # filas adicionales con listas desplegables para nuevos registros
+
+    # ---------------------------------------------------------------- Listas
+    ejes = db.catalogo("EJE")
+    oes = db.catalogo("OE")
+    cuentas = [r["partida_rubro"] for r in db.query(
+        "SELECT DISTINCT partida_rubro FROM catalogo_niif_partidas WHERE tipo_flujo IN ('Egresos','Ingresos') "
+        "AND activo=1 ORDER BY partida_rubro")]
+    categorias = [r["categoria"] for r in db.query(
+        "SELECT DISTINCT categoria FROM catalogo_niif_partidas WHERE categoria<>'' ORDER BY categoria")]
+    sust = ctrl.catalogo_values("SUSTENTO_EGR") + [x for x in ctrl.catalogo_values("SUSTENTO_ING")
+                                                   if x not in ctrl.catalogo_values("SUSTENTO_EGR")]
+    listas = [
+        ("TL_Macro", "Macrogrupos", MACROGRUPOS),
+        ("TL_SiNo", "Sí / No", ["Sí", "No"]),
+        ("TL_Tipo", "Tipos de flujo", ["Egresos", "Ingresos", "Inversion"]),
+        ("TL_TipoCat", "Tipos de catálogo", list(CATALOGOS_ESTRATEGICOS.values())),
+        ("TL_Ejes", "Ejes (código)", [e["codigo"] for e in ejes]),
+        ("TL_OE", "OE del PEI (código)", [o["codigo"] for o in oes]),
+        ("TL_Bases", "Bases de cálculo", BASES_CALCULO),
+        ("TL_Ambito", "Ámbito", ["GLOBAL"] + [u["codigo_area"] for u in unidades]),
+        ("TL_Cuentas", "Cuentas NIIF (ingresos y egresos)", cuentas),
+        ("TL_Sust", "Sustentos", sust),
+        ("TL_Cat", "Categorías presupuestales", categorias),
+        ("TL_Macro2", "Macrogrupo de la plantilla", ["*"] + MACROGRUPOS),
+        ("TL_TipoFun", "Tipo (plantilla)", ["Egresos", "Ingresos"]),
+    ]
+    for j, (name, title, values) in enumerate(listas, start=1):
+        c = ws_l.cell(1, j, title)
+        c.font, c.fill, c.alignment = F_HDR, FILL_HDR, CENTER
+        for i, v in enumerate(values, start=2):
+            ws_l.cell(i, j, v)
+        ws_l.column_dimensions[col(j)].width = 34
+        last = max(2, len(values) + 1)
+        wb.defined_names[name] = DefinedName(name, attr_text=f"Listas!${col(j)}$2:${col(j)}${last}")
+
+    def table(ws, title: str, note: str, rows: list[dict], widths: dict, fmts: dict = None,
+              dvs: dict = None, calc_cols: tuple = ("id",)):
+        spec = PLANTILLA_PARAM[ws.title]
+        x = XL(ws)
+        x.title(title, note, unidad=False)
+        x.headers(4, [h for _, h in spec])
+        for i, row in enumerate(rows, start=5):
+            for j, (key, _h) in enumerate(spec, start=1):
+                v = row.get(key)
+                kind = "calc" if key in calc_cols else "input"
+                x.put(f"{col(j)}{i}", None if v == "" else v, kind, (fmts or {}).get(key))
+        last = 4 + len(rows) + EXTRA
+        for j, (key, _h) in enumerate(spec, start=1):
+            ws.column_dimensions[col(j)].width = widths.get(key, 16)
+            if dvs and key in dvs:
+                x.dv_list(f"{col(j)}5:{col(j)}{last}", dvs[key])
+            if fmts and key in fmts:
+                for r in range(5 + len(rows), last + 1):
+                    ws.cell(r, j).number_format = fmts[key]
+        ws.freeze_panes = "B5" if spec[0][0] == "id" else "C5"
+        ws.auto_filter.ref = f"A4:{col(len(spec))}{4 + max(1, len(rows))}"
+        return x
+
+    # ------------------------------------------------------- Datos generales
+    rows = []
+    for key, label, note in PARAM_GENERALES:
+        rows.append({"clave": key, "parametro": label, "valor": prm.get(key), "nota": note})
+    x = table(sheets["Datos_Generales"], "DATOS GENERALES Y SUPUESTOS DE FORMULACIÓN",
+              "Modifique solo la columna «Valor». Porcentajes: 2.5% o 0.025. Fechas: AAAA-MM-DD.", rows,
+              {"clave": 26, "parametro": 52, "valor": 26, "nota": 62}, calc_cols=("clave", "parametro", "nota"))
+    for i, (key, _l, _n) in enumerate(PARAM_GENERALES, start=5):
+        if key in PARAM_PCT:
+            sheets["Datos_Generales"][f"C{i}"].number_format = PCT
+        elif key == "mes_inicio_reajuste":
+            x.dv_list(f"C{i}", '"' + ",".join(str(m) for m in range(1, 13)) + '"')
+
+    # ------------------------------------------------------- Unidades y techos
+    rows = []
+    for u in unidades:
+        r = dict(u)
+        r["genera_ingresos"] = "Sí" if u["genera_ingresos"] else "No"
+        rows.append(r)
+    money_keys = {k: MONEY for k, _ in PLANTILLA_PARAM["Unidades_Techos"] if k.startswith(("techo_", "meta_"))}
+    table(sheets["Unidades_Techos"], "UNIDADES ORGÁNICAS Y TECHOS PRESUPUESTALES",
+          "Una fila por unidad (centro de costo). El código de área identifica a la unidad; para crear una unidad "
+          "agregue una fila sin ID.", rows,
+          {"codigo_area": 12, "macrogrupo": 30, "nombre_unidad": 52, "centro_costo": 44, "responsable": 30,
+           "cargo": 36, "correo": 30, "genera_ingresos": 14, **{k: 18 for k in money_keys}}, money_keys,
+          {"macrogrupo": "TL_Macro", "genera_ingresos": "TL_SiNo"})
+
+    # ------------------------------------------- Cuentas NIIF + Partidas GG
+    rows = []
+    for r in db.query("SELECT * FROM catalogo_niif_partidas ORDER BY CASE tipo_flujo WHEN 'Egresos' THEN 0 "
+                      "WHEN 'Ingresos' THEN 1 ELSE 2 END, partida_gg='' , partida_gg COLLATE NOCASE, "
+                      "partida_rubro, id"):
+        r = dict(r)
+        r["activo"] = "Sí" if r["activo"] else "No"
+        rows.append(r)
+    table(sheets["Cuentas_NIIF_Partidas_GG"], "BASE CONSOLIDADA: CUENTAS NIIF + PARTIDAS GG",
+          "Cada fila es una cuenta contable NIIF con la Partida (GG) que verá el usuario en el combo «Partida» del "
+          "detalle y su descripción orientativa. Las cuentas sin Partida GG solo se usan en Funcionamiento.", rows,
+          {"tipo_flujo": 13, "partida_gg": 40, "descripcion": 60, "codigo_niif": 14, "partida_rubro": 44,
+           "categoria": 30, "naturaleza": 30, "resultado_funcion": 26, "activo": 10}, None,
+          {"tipo_flujo": "TL_Tipo", "categoria": "TL_Cat", "activo": "TL_SiNo"})
+
+    # ----------------------------------------------- Catálogos estratégicos
+    orden = list(CATALOGOS_ESTRATEGICOS)
+    rows = []
+    for tipo in orden:
+        for r in db.catalogo(tipo):
+            rows.append({"id": r["id"], "tipo_catalogo": CATALOGOS_ESTRATEGICOS[tipo], "codigo": r["codigo"],
+                         "descripcion": r["descripcion"], "eje": r["eje"] if tipo == "OBJ" else "",
+                         "padre": r["padre"] if tipo == "OBJ" else "", "extra": r["extra"], "orden": r["orden"]})
+    ws = sheets["Catalogos_Estrategicos"]
+    table(ws, "CATÁLOGOS ESTRATÉGICOS — RELACIÓN EJE → OBJETIVO ANUAL DEL POA → OE DEL PEI",
+          "Cada «Objetivo anual del POA (OBJ)» debe indicar el Eje estratégico al que pertenece y el OE del PEI al que "
+          "contribuye: en la formulación, el usuario elige el eje, luego un objetivo de ese eje y el OE se carga solo.",
+          rows, {"tipo_catalogo": 32, "codigo": 12, "descripcion": 56, "eje": 18, "padre": 18, "extra": 56, "orden": 8},
+          None, {"tipo_catalogo": "TL_TipoCat", "eje": "TL_Ejes", "padre": "TL_OE"})
+    n_spec = len(PLANTILLA_PARAM["Catalogos_Estrategicos"])
+    c_eje, c_oe = col(n_spec + 1), col(n_spec + 2)
+    for c_, h in ((c_eje, "Nombre del eje (automático)"), (c_oe, "Nombre del OE del PEI (automático)")):
+        cell = ws[f"{c_}4"]
+        cell.value, cell.font, cell.fill, cell.alignment, cell.border = h, F_HDR, FILL_HDR, CENTER, BORDER
+        ws.column_dimensions[c_].width = 40
+    last = 4 + len(rows) + EXTRA
+    rng = lambda c_: f"${c_}$5:${c_}${last}"  # noqa: E731
+    eje_lbl, oe_lbl = CATALOGOS_ESTRATEGICOS["EJE"], CATALOGOS_ESTRATEGICOS["OE"]
+    for r in range(5, last + 1):
+        ws[f"{c_eje}{r}"] = (f'=IF(E{r}="","",IFERROR(LOOKUP(2,1/(({rng("B")}="{eje_lbl}")*({rng("C")}=E{r})),'
+                             f'{rng("D")}),"Eje no existe"))')
+        ws[f"{c_oe}{r}"] = (f'=IF(F{r}="","",IFERROR(LOOKUP(2,1/(({rng("B")}="{oe_lbl}")*({rng("C")}=F{r})),'
+                            f'{rng("D")}),"OE no existe"))')
+        for c_ in (c_eje, c_oe):
+            ws[f"{c_}{r}"].font, ws[f"{c_}{r}"].fill, ws[f"{c_}{r}"].border = F_LINK, FILL_CALC, BORDER
+    XL(ws).status_cf(f"{c_eje}5:{c_oe}{last}")
+    ws.conditional_formatting.add(f"{c_eje}5:{c_oe}{last}",
+                                  CellIsRule(operator="equal", formula=['"Eje no existe"'], fill=FILL_BAD))
+    ws.conditional_formatting.add(f"{c_eje}5:{c_oe}{last}",
+                                  CellIsRule(operator="equal", formula=['"OE no existe"'], fill=FILL_BAD))
+
+    # ----------------------------------------------------- Costos de referencia
+    table(sheets["Costos_Referencia"], "COSTOS UNITARIOS DE REFERENCIA",
+          "Referencias para estimar costos cuando no se cuenta con cotización.", db.all("costos_referencia", order="id"),
+          {"concepto": 40, "unidad_medida": 24, "costo_unitario": 18, "fuente": 50}, {"costo_unitario": MONEY})
+
+    # ----------------------------------------------- Plantilla de funcionamiento
+    areas = {u["id"]: u["codigo_area"] for u in unidades}
+    rows = []
+    for r in db.all("plantilla_funcionamiento", order="unidad_id IS NOT NULL, unidad_id, orden, id"):
+        r = dict(r)
+        r["ambito"] = areas.get(r["unidad_id"], "GLOBAL")
+        r["solo_genera_ingresos"] = "Sí" if r["solo_genera_ingresos"] else "No"
+        r["activo"] = "Sí" if r["activo"] else "No"
+        rows.append(r)
+    table(sheets["Plantilla_Funcionamiento"], "PLANTILLA BASE DE «CORRER ACTIVIDADES DE FUNCIONAMIENTO»",
+          "Monto = Base de cálculo × Porcentaje (o Monto fijo si la base es MONTO_FIJO). Se prorratea 1/12 en Ene–Dic. "
+          "Ámbito GLOBAL aplica a todas las unidades del macrogrupo; un código de área reemplaza la fila global.",
+          rows, {"ambito": 14, "macrogrupo": 28, "solo_genera_ingresos": 16, "tipo_flujo": 12, "partida": 44,
+                 "base_calculo": 24, "porcentaje": 14, "monto_fijo": 18, "aplica_ajuste": 16, "sustento": 30,
+                 "activo": 10, "orden": 8},
+          {"porcentaje": "0.0000%", "monto_fijo": MONEY},
+          {"ambito": "TL_Ambito", "macrogrupo": "TL_Macro2", "solo_genera_ingresos": "TL_SiNo",
+           "tipo_flujo": "TL_TipoFun", "partida": "TL_Cuentas", "base_calculo": "TL_Bases", "aplica_ajuste": "TL_SiNo",
+           "sustento": "TL_Sust", "activo": "TL_SiNo"})
+
+    # ------------------------------------------------------------ Instrucciones
+    x = XL(ws_i)
+    x.title("PLANTILLA DE PARÁMETROS Y CATÁLOGOS — SISTEMA POA - DPDI",
+            f"{prm.get('institucion') or ''} · Año de formulación {prm.get('anio_formulacion') or ''} · "
+            f"Generada el {datetime.now():%Y-%m-%d %H:%M}", unidad=False)
+    x.widths({"A": 2, "B": 34, "C": 110})
+    pasos = [
+        ("1. Edite", "Modifique o agregue filas en cada hoja. Celdas amarillas = datos editables; grises = calculadas o "
+                     "de control (no las modifique)."),
+        ("2. Columna ID", "Identifica el registro existente. Déjela vacía para crear un registro nuevo. No copie IDs "
+                          "entre filas."),
+        ("3. Importe", "En el sistema: Parámetros y catálogos → «Importar plantilla de Parámetros y Catálogos (.xlsx)». "
+                       "Los registros se actualizan o se agregan; no se elimina nada (use «Activo = No» para retirar "
+                       "una cuenta)."),
+        ("Datos_Generales", "Año, fechas, tipo de cambio, inflación, reajuste, morosidad y supuestos de matrícula."),
+        ("Unidades_Techos", "Unidades orgánicas, responsables, techos de egresos por tipo de actividad, sub-techos de "
+                            "planilla y marketing, y metas de ingresos y resultado."),
+        ("Cuentas_NIIF_Partidas_GG", "Base única: cada cuenta contable NIIF con su Partida (GG) y descripción "
+                                     "orientativa. En el detalle de las actividades el usuario solo ve el combo "
+                                     "«Partida» con las Partidas GG; la categoría y el código NIIF se derivan de esta "
+                                     "hoja."),
+        ("Catalogos_Estrategicos", "Ejes, OE del PEI, objetivos anuales del POA y listas (orígenes, prioridades, "
+                                   "sustentos, categorías OO, tipos de actividad propia e inversión). Para cada "
+                                   "objetivo anual (OBJ) indique su Eje y su OE: así se arma la lista dependiente "
+                                   "Eje → Objetivo anual → OE (automático). Las acciones estratégicas (AE) ya no se "
+                                   "usan."),
+        ("Costos_Referencia", "Costos unitarios referenciales por concepto."),
+        ("Plantilla_Funcionamiento", "Filas que inserta el botón «Correr Actividades de Funcionamiento»."),
+        ("Listas", "Valores de las listas desplegables (se generan al descargar la plantilla)."),
+    ]
+    for i, (a, b) in enumerate(pasos, start=4):
+        x.put(f"B{i}", a, "label")
+        x.put(f"C{i}", b, "plain")
+        ws_i.row_dimensions[i].height = 32
+    for ws in wb.worksheets:
+        ws.sheet_view.zoomScale = 90
+    wb.active = 0
+    wb.save(path)
     return path

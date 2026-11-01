@@ -55,11 +55,14 @@ EJES = [
 # Sección E — Objetivos estratégicos del PEI (la DPDI completa la descripción e indicador)
 OBJETIVOS_PEI = [(f"OE{i}", f"Objetivo estratégico {i} del PEI", "") for i in range(1, 9)]
 
-# Sección F — Acciones estratégicas del PEI (3 por OE, vinculadas a su OE)
-ACCIONES_PEI = [(f"AE{oe}.{k}", f"OE{oe}", f"Acción estratégica {oe}.{k} del PEI") for oe in range(1, 9) for k in range(1, 4)]
+# Sección G — Objetivos anuales del POA: cada objetivo pertenece a un Eje estratégico y contribuye a un OE del PEI.
+# Relación de dependencia en la formulación: Eje → Objetivo anual del POA → OE del PEI (automático).
+# (codigo, descripcion, oe_pei, eje). Vínculos provisionales: la DPDI los actualiza con la plantilla de parámetros.
+OBJETIVOS_POA = [(f"OBJ-{i:02d}", f"Objetivo anual {i:02d} del POA", f"OE{min(8, (i - 1) // 2 + 1)}",
+                  f"EJ-{(i - 1) % 9 + 1:02d}") for i in range(1, 16)]
 
-# Sección G — Objetivos anuales del POA vinculados a su OE del PEI
-OBJETIVOS_POA = [(f"OBJ-{i:02d}", f"Objetivo anual {i:02d} del POA", f"OE{min(8, (i - 1) // 2 + 1)}") for i in range(1, 16)]
+# Unidades de medida del indicador de las iniciativas
+UNIDADES_MEDIDA = ["Unidad", "Porcentaje (%)"]
 
 # Sección O — Niveles de prioridad
 PRIORIDADES = [
@@ -451,7 +454,7 @@ NIIF_PARTIDAS = [
     ('7041040200', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - FUTURE', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - FUTURE', 'PRODUCCIÓN', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
     ('7041046000', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PEAS', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PEAS', 'PRODUCCIÓN', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
     ('7041040100', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PREGRADO', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PREGRADO', 'PRODUCCIÓN', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
-    ('7041040700', 'CONGRESOS. SEMINARIOS, TALLERES, OTROS POSGRADO', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PREGRADO', 'PRODUCCIÓN', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
+    ('7041040700', 'CONGRESOS. SEMINARIOS, TALLERES, OTROS POSGRADO', 'CONGRESOS, SEMINARIOS, TALLERES Y OTROS - POSGRADO', 'PRODUCCIÓN', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
     ('XXXXXXXXXX', 'Materiales', 'Materiales', 'PRODUCCIÓN', 'Ingresos', '', ''),
     ('7041010200', 'MATRICULA FUTURE', 'MATRICULA FUTURE', 'MATRICULA', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
     ('7041010400', 'MATRICULA POST GRADO', 'MATRICULA POSGRADO', 'MATRICULA', 'Ingresos', 'INGRESO POR VENTAS', 'INGRESO BRUTO POR VENTAS'),
@@ -599,10 +602,97 @@ PARTIDAS_GG = [
 
 
 
+# Partidas GG oficiales que no tenían una cuenta NIIF con el mismo nombre: cuenta asignada en la consolidación.
+GG_CUENTA_MANUAL = {
+    ("Alquiler maquinaria y equipos", "Egresos"): "63532",
+    ("Materiales e insumos quimicos", "Egresos"): "6941011400",
+    ("Modulos academicos", "Egresos"): "6941011000",
+}
+
+
+def _tipo_gg(tipo: str) -> str:
+    return tipo if tipo in ("Egresos", "Ingresos") else "Inversion"
+
+
+def consolidar_niif_gg(conn) -> None:
+    """Base única «Cuentas NIIF + Partidas GG»: cada cuenta NIIF lleva su Partida GG y la descripción orientativa."""
+    from controllers import norm_key
+    rows = conn.execute("SELECT id, codigo_niif, partida_rubro, partida_gg, descripcion, tipo_flujo "
+                        "FROM catalogo_niif_partidas ORDER BY id").fetchall()
+    gg_oficial = {}
+    for nombre, descripcion, tipo in PARTIDAS_GG:
+        gg_oficial.setdefault((norm_key(nombre), _tipo_gg(tipo)), (nombre, descripcion))
+    # 1) cuentas sin GG cuyo nombre coincide con una Partida GG oficial
+    for rid, code, cuenta, gg, desc, tipo in rows:
+        if not gg and (norm_key(cuenta), tipo) in gg_oficial:
+            conn.execute("UPDATE catalogo_niif_partidas SET partida_gg=? WHERE id=?",
+                         (gg_oficial[(norm_key(cuenta), tipo)][0], rid))
+    # 2) asignaciones manuales
+    for (nombre, tipo), code in GG_CUENTA_MANUAL.items():
+        conn.execute("UPDATE catalogo_niif_partidas SET partida_gg=? WHERE codigo_niif=? AND tipo_flujo=? AND "
+                     "(partida_gg IS NULL OR partida_gg='')", (nombre, code, tipo))
+    # 3) descripciones orientativas de las Partidas GG
+    for (key, tipo), (nombre, descripcion) in gg_oficial.items():
+        if descripcion:
+            conn.execute("UPDATE catalogo_niif_partidas SET descripcion=? WHERE partida_gg=? AND tipo_flujo=? AND "
+                         "(descripcion IS NULL OR descripcion='')", (descripcion, nombre, tipo))
+
+
+def _migrar_bd_existente(db) -> None:
+    """Migraciones de versiones anteriores (se ejecutan una sola vez)."""
+    conn = db.conn
+    if db.meta("version_catalogos") == "2":
+        return
+    from controllers import norm_key
+    # a) la tabla separada de Partidas GG se integra en la base consolidada
+    if db.table_exists("catalogo_partidas_gg"):
+        for nombre, descripcion, tipo, codigo in conn.execute(
+                "SELECT partida_gg, descripcion, tipo, codigo_niif FROM catalogo_partidas_gg").fetchall():
+            tipo = _tipo_gg(tipo)
+            hit = conn.execute("SELECT id FROM catalogo_niif_partidas WHERE partida_gg=? AND tipo_flujo=?",
+                               (nombre, tipo)).fetchone()
+            if hit:
+                if descripcion:
+                    conn.execute("UPDATE catalogo_niif_partidas SET descripcion=? WHERE partida_gg=? AND tipo_flujo=? "
+                                 "AND (descripcion IS NULL OR descripcion='')", (descripcion, nombre, tipo))
+                continue
+            conn.execute("INSERT OR IGNORE INTO catalogo_niif_partidas (codigo_niif, partida_rubro, partida_gg, "
+                         "descripcion, categoria, tipo_flujo) VALUES (?,?,?,?,?,?)",
+                         (codigo or "SIN-CODIGO", nombre, nombre, descripcion or "", "", tipo))
+        conn.execute("DROP TABLE catalogo_partidas_gg")
+    conn.execute("UPDATE catalogo_niif_partidas SET partida_gg='CONGRESOS, SEMINARIOS, TALLERES Y OTROS - POSGRADO' "
+                 "WHERE codigo_niif='7041040700' AND partida_gg='CONGRESOS, SEMINARIOS, TALLERES Y OTROS - PREGRADO'")
+    # b) las Acciones estratégicas (AE) ya no se utilizan: el eje estratégico cumple ese rol
+    conn.execute("DELETE FROM catalogos_estrategicos WHERE tipo_catalogo='AE'")
+    conn.execute("UPDATE iniciativas SET ae=''")
+    # c) objetivos anuales sin eje: vínculo provisional
+    for codigo, d, oe, eje in OBJETIVOS_POA:
+        conn.execute("UPDATE catalogos_estrategicos SET eje=? WHERE tipo_catalogo='OBJ' AND codigo=? AND "
+                     "(eje IS NULL OR eje='')", (eje, codigo))
+    consolidar_niif_gg(conn)
+    # d) el detalle usa una sola «Partida» (Partida GG)
+    gg_por_cuenta, cat_por_gg = {}, {}
+    for cuenta, gg, tipo, cat in conn.execute("SELECT partida_rubro, partida_gg, tipo_flujo, categoria FROM "
+                                              "catalogo_niif_partidas WHERE partida_gg<>'' ORDER BY id").fetchall():
+        gg_por_cuenta.setdefault((norm_key(cuenta), tipo), gg)
+        cat_por_gg.setdefault((norm_key(gg), tipo), cat)
+    for t in ("detalle_iniciativas", "detalle_otras_operativas", "detalle_act_prop", "detalle_inversiones"):
+        for rid, partida, gg, tipo, cat in conn.execute(
+                f"SELECT id, partida, partida_gg, tipo, categoria FROM {t}").fetchall():
+            nuevo = gg or gg_por_cuenta.get((norm_key(partida), tipo)) or partida
+            nueva_cat = cat_por_gg.get((norm_key(nuevo), tipo)) or cat
+            if nuevo != partida or nuevo != gg or nueva_cat != cat:
+                conn.execute(f"UPDATE {t} SET partida=?, partida_gg=?, categoria=? WHERE id=?",
+                             (nuevo, nuevo, nueva_cat, rid))
+    conn.commit()
+    db.set_meta("version_catalogos", "2")
+
+
 def seed_database(db) -> None:
     """Pre-puebla (idempotente) catálogos, parámetros y unidades iniciales."""
     conn = db.conn
     db.parametros()
+    nueva = not db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas")
 
     conn.executemany(
         "INSERT OR IGNORE INTO catalogo_niif_partidas "
@@ -610,36 +700,27 @@ def seed_database(db) -> None:
         "VALUES (?,?,?,?,?,?,?)",
         NIIF_PARTIDAS,
     )
-    gg_rows = []
-    for nombre, descripcion, tipo in PARTIDAS_GG:
-        if tipo in ("Egresos", "Ingresos"):
-            gg_rows.append((nombre, descripcion, tipo, ""))
-        else:
-            gg_rows.append((nombre, descripcion, "Inversion", tipo))
-    conn.executemany(
-        "INSERT OR IGNORE INTO catalogo_partidas_gg (partida_gg, descripcion, tipo, codigo_niif) VALUES (?,?,?,?)",
-        gg_rows,
-    )
+    if nueva:
+        consolidar_niif_gg(conn)
 
     def cat(tipo_catalogo, rows):
         conn.executemany(
-            "INSERT OR IGNORE INTO catalogos_estrategicos (tipo_catalogo, codigo, descripcion, padre, extra, orden) "
-            "VALUES (?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO catalogos_estrategicos (tipo_catalogo, codigo, descripcion, padre, eje, extra, orden) "
+            "VALUES (?,?,?,?,?,?,?)",
             [(tipo_catalogo, *r, i) for i, r in enumerate(rows)],
         )
 
-    cat("EJE", [(c, d, "", a) for c, d, a in EJES])
-    cat("OE", [(c, d, "", ind) for c, d, ind in OBJETIVOS_PEI])
-    cat("AE", [(c, d, oe, "") for c, oe, d in ACCIONES_PEI])
-    cat("OBJ", [(c, d, oe, "") for c, d, oe in OBJETIVOS_POA])
-    cat("PRIORIDAD", [(c, d, "", crit) for c, d, crit in PRIORIDADES])
-    cat("ORIGEN", [(o, o, "", "") for o in ORIGENES])
-    cat("SUSTENTO_EGR", [(s, s, "", "") for s in SUSTENTOS_EGRESOS])
-    cat("SUSTENTO_ING", [(s, s, "", "") for s in SUSTENTOS_INGRESOS])
-    cat("CAT_OO", [(c, d, "", inc) for c, d, inc in CATEGORIAS_OO])
-    cat("TIPO_AP", [(t, t, "", d) for t, d in TIPOS_AP])
-    cat("TIPO_INV", [(t, t, "", d) for t, d in TIPOS_INVERSION])
-    cat("TIPO_ACTIVIDAD", [(t, d, "", h) for t, d, h in TIPOS_ACTIVIDAD])
+    cat("EJE", [(c, d, "", "", a) for c, d, a in EJES])
+    cat("OE", [(c, d, "", "", ind) for c, d, ind in OBJETIVOS_PEI])
+    cat("OBJ", [(c, d, oe, eje, "") for c, d, oe, eje in OBJETIVOS_POA])
+    cat("PRIORIDAD", [(c, d, "", "", crit) for c, d, crit in PRIORIDADES])
+    cat("ORIGEN", [(o, o, "", "", "") for o in ORIGENES])
+    cat("SUSTENTO_EGR", [(x, x, "", "", "") for x in SUSTENTOS_EGRESOS])
+    cat("SUSTENTO_ING", [(x, x, "", "", "") for x in SUSTENTOS_INGRESOS])
+    cat("CAT_OO", [(c, d, "", "", inc) for c, d, inc in CATEGORIAS_OO])
+    cat("TIPO_AP", [(t, t, "", "", d) for t, d in TIPOS_AP])
+    cat("TIPO_INV", [(t, t, "", "", d) for t, d in TIPOS_INVERSION])
+    cat("TIPO_ACTIVIDAD", [(t, d, "", "", h) for t, d, h in TIPOS_ACTIVIDAD])
 
     conn.executemany(
         "INSERT OR IGNORE INTO costos_referencia (concepto, unidad_medida, costo_unitario, fuente) VALUES (?,?,?,?)",
@@ -657,3 +738,4 @@ def seed_database(db) -> None:
             [(*r, i) for i, r in enumerate(PLANTILLA_FUNCIONAMIENTO)],
         )
     conn.commit()
+    _migrar_bd_existente(db)

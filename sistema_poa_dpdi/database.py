@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS catalogo_niif_partidas (
     codigo_niif TEXT NOT NULL,
     partida_rubro TEXT NOT NULL,
     partida_gg TEXT DEFAULT '',
+    descripcion TEXT DEFAULT '',
     categoria TEXT DEFAULT '',
     tipo_flujo TEXT NOT NULL CHECK (tipo_flujo IN ('Ingresos','Egresos','Inversion')),
     naturaleza TEXT DEFAULT '',
@@ -136,15 +137,7 @@ CREATE TABLE IF NOT EXISTS catalogo_niif_partidas (
     UNIQUE (codigo_niif, partida_rubro, tipo_flujo)
 );
 CREATE INDEX IF NOT EXISTS ix_niif_tipo ON catalogo_niif_partidas(tipo_flujo);
-
-CREATE TABLE IF NOT EXISTS catalogo_partidas_gg (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    partida_gg TEXT NOT NULL,
-    descripcion TEXT DEFAULT '',
-    tipo TEXT NOT NULL,
-    codigo_niif TEXT DEFAULT '',
-    UNIQUE (partida_gg, tipo)
-);
+CREATE INDEX IF NOT EXISTS ix_niif_gg ON catalogo_niif_partidas(partida_gg);
 
 CREATE TABLE IF NOT EXISTS catalogos_estrategicos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,6 +145,7 @@ CREATE TABLE IF NOT EXISTS catalogos_estrategicos (
     codigo TEXT NOT NULL,
     descripcion TEXT DEFAULT '',
     padre TEXT DEFAULT '',
+    eje TEXT DEFAULT '',
     extra TEXT DEFAULT '',
     orden INTEGER DEFAULT 0,
     UNIQUE (tipo_catalogo, codigo)
@@ -293,6 +287,11 @@ CREATE TABLE IF NOT EXISTS funcionamiento_egr (
 {_detalle_ddl('detalle_act_prop', 'act_propias')}
 {_detalle_ddl('detalle_inversiones', 'inversiones')}
 
+CREATE TABLE IF NOT EXISTS app_meta (
+    clave TEXT PRIMARY KEY,
+    valor TEXT
+);
+
 CREATE TABLE IF NOT EXISTS bitacora (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha TEXT DEFAULT (datetime('now','localtime')),
@@ -326,9 +325,31 @@ class Database:
             seed_database(self)
 
     # ------------------------------------------------------------------ schema
+    # Columnas añadidas en versiones posteriores (migración de bases existentes).
+    MIGRATIONS = [
+        ("catalogo_niif_partidas", "descripcion", "TEXT DEFAULT ''"),
+        ("catalogos_estrategicos", "eje", "TEXT DEFAULT ''"),
+    ]
+
     def create_schema(self) -> None:
         self.conn.executescript(SCHEMA)
+        for table, column, ddl in self.MIGRATIONS:
+            cols = [r[1] for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            if column not in cols:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
         self.conn.commit()
+        self._columns_cache.clear()
+
+    def meta(self, clave: str) -> Optional[str]:
+        r = self.conn.execute("SELECT valor FROM app_meta WHERE clave = ?", (clave,)).fetchone()
+        return r[0] if r else None
+
+    def set_meta(self, clave: str, valor: str) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO app_meta (clave, valor) VALUES (?, ?)", (clave, valor))
+        self.conn.commit()
+
+    def table_exists(self, table: str) -> bool:
+        return bool(self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone())
 
     def columns(self, table: str) -> list[str]:
         if table not in self._columns_cache:
