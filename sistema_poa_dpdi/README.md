@@ -80,9 +80,10 @@ pyinstaller --noconfirm --clean --onefile --windowed --name Sistema_POA_DPDI --c
 
 ### Si `build_exe.bat` muestra «Error durante la construcción»
 
-* `PermissionError: Acceso denegado … dist\Sistema_POA_DPDI.exe`: el sistema estaba abierto o el antivirus bloqueaba el
-  ejecutable anterior. La versión actual del `.bat` cierra el programa y reemplaza el `.exe` automáticamente; si aun así
-  falla, cierre el sistema y vuelva a ejecutarlo.
+* `PermissionError: Acceso denegado … dist\Sistema_POA_DPDI.exe` o «El sistema no puede encontrar la ruta
+  especificada»: el `.bat` ahora ejecuta `preparar_build.py`, que cierra el sistema y borra (o renombra, si está en uso)
+  el ejecutable anterior sin depender del dispositivo `nul` de Windows. Si aun así falla, cierre el sistema, borre la
+  carpeta `dist` y vuelva a ejecutar `build_exe.bat`.
 * La advertencia de Windows «No se pudo comprobar el editor» aparece porque el `.bat` no tiene firma digital: pulse
   **Ejecutar**.
 * Los datos no se pierden al reconstruir: la base está en `%APPDATA%\Sistema_POA_DPDI\poa_dpdi.sqlite3`.
