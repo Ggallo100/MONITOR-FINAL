@@ -426,16 +426,19 @@ class POAController:
         return u
 
     def unidad_display(self, u: dict) -> str:
-        """Código de área + nombre de la unidad orgánica + centro de costo.
+        """Código de área + centro de costo + nombre de la unidad orgánica.
 
-        Ej.: «201702 CENTRO DE IDIOMAS - LIMA SUR». Si el centro de costo repite el nombre de la unidad
-        solo se agrega lo que lo diferencia (p. ej. «… COMUNICACIÓN - PRESENCIAL»)."""
-        codigo, nombre, cc = s(u.get("codigo_area")), s(u.get("nombre_unidad")), s(u.get("centro_costo"))
-        sufijo = cc
-        if cc and norm_key(cc).startswith(norm_key(nombre)):
-            sufijo = cc[len(nombre):].strip(" -–·") if len(cc) > len(nombre) else ""
-        texto = f"{codigo} {nombre}".strip()
-        return f"{texto} - {sufijo}" if sufijo else texto
+        Ej.: «201702 CENTRO DE IDIOMAS - LIMA SUR», «40110204 DIRECCION DE CAMPUS LIMA NORTE - LIMA NORTE».
+        Si ambos textos son idénticos (o uno está vacío) se muestra una sola vez."""
+        codigo, cc, nombre = s(u.get("codigo_area")), s(u.get("centro_costo")), s(u.get("nombre_unidad"))
+        partes = [cc, nombre] if norm_key(cc) != norm_key(nombre) else [cc]
+        return f"{codigo} {' - '.join(p for p in partes if p)}".strip()
+
+    def macrogrupos(self) -> list[str]:
+        """Macrogrupos oficiales + los registrados por la DPDI en las unidades."""
+        otros = [r["macrogrupo"] for r in self.db.query(
+            "SELECT DISTINCT macrogrupo FROM unidades_organicas WHERE macrogrupo<>'' ORDER BY macrogrupo")]
+        return MACROGRUPOS + [m for m in otros if m not in MACROGRUPOS]
 
     def save_unidad(self, data: dict, uid: Optional[int] = None) -> int:
         data = dict(data)

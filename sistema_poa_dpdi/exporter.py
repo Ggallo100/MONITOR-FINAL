@@ -1934,7 +1934,7 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
     Hojas: Instrucciones, Datos_Generales, Unidades_Techos, Cuentas_NIIF_Partidas_GG, Catalogos_Estrategicos,
     Costos_Referencia, Plantilla_Funcionamiento y Listas (valores de las listas desplegables).
     """
-    from catalogs_seed import BASES_CALCULO, MACROGRUPOS
+    from catalogs_seed import BASES_CALCULO
     from controllers import CATALOGOS_ESTRATEGICOS, PARAM_GENERALES, PARAM_PCT, PLANTILLA_PARAM
 
     path = Path(path)
@@ -1959,7 +1959,7 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
     sust = ctrl.catalogo_values("SUSTENTO_EGR") + [x for x in ctrl.catalogo_values("SUSTENTO_ING")
                                                    if x not in ctrl.catalogo_values("SUSTENTO_EGR")]
     listas = [
-        ("TL_Macro", "Macrogrupos", MACROGRUPOS),
+        ("TL_Macro", "Macrogrupos", ctrl.macrogrupos()),
         ("TL_SiNo", "Sí / No", ["Sí", "No"]),
         ("TL_Tipo", "Tipos de flujo", ["Egresos", "Ingresos", "Inversion"]),
         ("TL_TipoCat", "Tipos de catálogo", list(CATALOGOS_ESTRATEGICOS.values())),
@@ -1970,7 +1970,7 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
         ("TL_Cuentas", "Cuentas NIIF (ingresos y egresos)", cuentas),
         ("TL_Sust", "Sustentos", sust),
         ("TL_Cat", "Categorías presupuestales", categorias),
-        ("TL_Macro2", "Macrogrupo de la plantilla", ["*"] + MACROGRUPOS),
+        ("TL_Macro2", "Macrogrupo de la plantilla", ["*"] + ctrl.macrogrupos()),
         ("TL_TipoFun", "Tipo (plantilla)", ["Egresos", "Ingresos"]),
     ]
     for j, (name, title, values) in enumerate(listas, start=1):

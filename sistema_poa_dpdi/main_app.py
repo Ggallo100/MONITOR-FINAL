@@ -33,7 +33,7 @@ import customtkinter as ctk
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from catalogs_seed import BASES_CALCULO, MACROGRUPOS  # noqa: E402
-from controllers import (DETAIL_TABLE, PRORRATEO_12, POAController, calc_detalle, calc_fegr, calc_fing,  # noqa: E402
+from controllers import (DETAIL_TABLE, PLANTILLA_PARAM, PRORRATEO_12, POAController, calc_detalle, calc_fegr, calc_fing,  # noqa: E402
                          code_display, control_meta, distribuir, fmt_mark, fmt_money, fmt_pct, s, to_float)
 from database import MCOLS, MESES, Database  # noqa: E402
 from exporter import (export_bd_consolidada, export_libro_oficial, export_pdf,  # noqa: E402
@@ -573,9 +573,9 @@ class LoginFrame(ctk.CTkFrame):
         self.role = ctk.CTkSegmentedButton(card, values=[ROLE_UNIT, ROLE_ADMIN], command=self._role_changed)
         self.role.set(ROLE_UNIT)
         self.role.pack(padx=30, pady=6, fill="x")
-        ctk.CTkLabel(card, text="Unidad orgánica (código de área · unidad orgánica · centro de costo)",
+        ctk.CTkLabel(card, text="Unidad orgánica (código de área · centro de costo · unidad orgánica)",
                      anchor="w").pack(fill="x", padx=30, pady=(12, 0))
-        self.search = ctk.CTkEntry(card, width=620, placeholder_text="Buscar por código, unidad o centro de costo…")
+        self.search = ctk.CTkEntry(card, width=620, placeholder_text="Buscar por código, centro de costo o unidad orgánica…")
         self.search.pack(padx=30, pady=(4, 2))
         self.search.bind("<KeyRelease>", lambda e: self._filter())
         self.unit = ctk.CTkComboBox(card, values=[], width=620, state="readonly")
@@ -924,6 +924,7 @@ class ParametrosTab(ctk.CTkFrame):
                       command=self.import_template).pack(side="left", padx=4, pady=5)
         tv = ctk.CTkTabview(self)
         tv.pack(fill="both", expand=True)
+        self.tv = tv
         self.panels: list = []
 
         # --- Datos generales
@@ -952,31 +953,28 @@ class ParametrosTab(ctk.CTkFrame):
         ctk.CTkLabel(sc, text="Porcentajes: escriba 2.5, 2.5% o 0.025 (todos equivalen a 2.5 %).",
                      text_color="gray40").pack(anchor="w", padx=10, pady=4)
 
-        # --- Unidades y techos
+        # --- Unidades y techos (misma estructura y orden que la hoja «Unidades_Techos» de la plantilla)
         t = tv.add("Unidades y techos")
-        fields_u = [
-            Field("codigo_area", "Código de área"), Field("macrogrupo", "Macrogrupo", "combo", MACROGRUPOS),
-            Field("nombre_unidad", "Nombre de la unidad"), Field("centro_costo", "Centro de costo"),
-            Field("responsable", "Responsable"), Field("cargo", "Cargo"), Field("correo", "Correo"),
-            Field("genera_ingresos", "¿Genera ingresos?", "check"),
-            Field("techo_iniciativas", "Techo iniciativas (S/)"), Field("techo_funcionamiento", "Techo funcionamiento (S/)"),
-            Field("techo_otras_operativas", "Techo otras operativas (S/)"), Field("techo_inversion", "Techo inversión (S/)"),
-            Field("techo_planilla_docente", "Techo planilla docente (S/)"),
-            Field("techo_planilla_adm", "Techo planilla adm. (S/)"), Field("techo_marketing", "Techo marketing (S/)"),
-            Field("meta_ingresos_func", "Meta ingresos funcionamiento (S/)"),
-            Field("meta_resultado_otras", "Meta ingresos otras operativas (S/)"),
-            Field("meta_resultado_propias", "Meta resultado act. propias (S/)"),
-        ]
-        p = CrudPanel(t, app, "unidades_organicas",
-                      [("codigo_area", "Área", 80), ("macrogrupo", "Macrogrupo", 170), ("nombre_unidad", "Unidad", 300),
-                       ("techo_iniciativas", "Techo INI", 100, "money"), ("techo_funcionamiento", "Techo FUN", 110, "money"),
-                       ("techo_otras_operativas", "Techo OO", 100, "money"), ("techo_inversion", "Techo INV", 100, "money"),
-                       ("techo_planilla_docente", "Planilla doc.", 100, "money"),
-                       ("techo_planilla_adm", "Planilla adm.", 100, "money"), ("techo_marketing", "Marketing", 100, "money"),
-                       ("meta_ingresos_func", "Meta ingresos", 110, "money")],
-                      fields_u, order="macrogrupo, nombre_unidad", save_fn=lambda d, i: self.c.save_unidad(d, i),
-                      delete_fn=self.c.delete_unidad, search_cols=("codigo_area", "nombre_unidad", "macrogrupo"),
-                      defaults=lambda: {"macrogrupo": MACROGRUPOS[0]})
+        spec = [x for x in PLANTILLA_PARAM["Unidades_Techos"] if x[0] != "id"]
+        fields_u, cols_u = [], []
+        for key, header in spec:
+            if key == "macrogrupo":
+                fields_u.append(Field(key, header, "combo_free", self.c.macrogrupos))
+            elif key == "genera_ingresos":
+                fields_u.append(Field(key, header, "check"))
+            else:
+                fields_u.append(Field(key, header))
+            ancho = {"codigo_area": 90, "macrogrupo": 170, "nombre_unidad": 260, "centro_costo": 260,
+                     "responsable": 200, "cargo": 220, "correo": 200, "genera_ingresos": 80}.get(key, 120)
+            cols_u.append((f"_{key}" if key == "genera_ingresos" else key, header, ancho,
+                           "money" if key.startswith(("techo_", "meta_")) else "text"))
+        p = CrudPanel(t, app, "unidades_organicas", cols_u, fields_u, order="codigo_area",
+                      save_fn=lambda d, i: self.c.save_unidad(d, i), delete_fn=self.c.delete_unidad,
+                      search_cols=("codigo_area", "centro_costo", "nombre_unidad", "macrogrupo", "responsable"),
+                      defaults=lambda: {"macrogrupo": MACROGRUPOS[0]},
+                      rows_fn=lambda: [dict(u, _genera_ingresos="Sí" if u["genera_ingresos"] else "No",
+                                            _display=self.c.unidad_display(u))
+                                       for u in self.app.db.all("unidades_organicas", order="codigo_area")])
         p.pack(fill="both", expand=True)
         self.panels.append(p)
 
@@ -1901,7 +1899,7 @@ class ResumenTab(ctk.CTkFrame):
         dirs = summ["directrices"]
         n_rev = sum(1 for d in dirs if d["resultado"] == "Revisar")
         self.head.configure(
-            text=f"{u['codigo_area']} · {u['nombre_unidad']} · Año {summ['anio']} · Responsable: {u['responsable'] or '—'}"
+            text=f"{self.c.unidad_display(u)} · Año {summ['anio']} · Responsable: {u['responsable'] or '—'}"
                  f"   |   Directrices: {11 - n_rev}/11 cumplen · Resultado S/ {fmt_money(summ['s3']['resultado'])}",
             text_color=COLOR_OK if not n_rev else COLOR_BAD)
         for sec in summ["sections"]:
@@ -2104,7 +2102,7 @@ class App(ctk.CTk):
             return
         u = self.c.unidad(self.uid)
         p = self.c.params
-        self.header.configure(text=f"{self.role}  ·  {u['codigo_area']} · {u['nombre_unidad']}  ·  {u['macrogrupo']}"
+        self.header.configure(text=f"{self.role}  ·  {self.c.unidad_display(u)}  ·  {u['macrogrupo']}"
                                    f"\nAño {p.anio} · TC {p.tc:.3f} · Inflación {fmt_pct(p.inflacion)} · "
                                    f"Morosidad {fmt_pct(p.morosidad)} · Reajuste {fmt_pct(p.reajuste)} desde "
                                    f"{MESES[p.mes_reajuste - 1]}")
