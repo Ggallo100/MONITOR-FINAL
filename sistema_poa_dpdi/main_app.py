@@ -573,13 +573,25 @@ class LoginFrame(ctk.CTkFrame):
         self.role = ctk.CTkSegmentedButton(card, values=[ROLE_UNIT, ROLE_ADMIN], command=self._role_changed)
         self.role.set(ROLE_UNIT)
         self.role.pack(padx=30, pady=6, fill="x")
-        ctk.CTkLabel(card, text="Unidad orgánica (código de área · centro de costo · unidad orgánica)",
-                     anchor="w").pack(fill="x", padx=30, pady=(12, 0))
-        self.search = ctk.CTkEntry(card, width=620, placeholder_text="Buscar por código, centro de costo o unidad orgánica…")
+        ctk.CTkLabel(card, text="Código del área / Centro de costo / Unidad orgánica",
+                     anchor="w", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=30, pady=(12, 0))
+        self.search = ctk.CTkEntry(card, width=620, placeholder_text="🔍 Buscar por código, centro de costo o unidad orgánica…")
         self.search.pack(padx=30, pady=(4, 2))
         self.search.bind("<KeyRelease>", lambda e: self._filter())
-        self.unit = ctk.CTkComboBox(card, values=[], width=620, state="readonly")
-        self.unit.pack(padx=30, pady=4)
+        self.search.bind("<Down>", lambda e: (self.lb.focus_set(), "break"))
+        self.search.bind("<Return>", lambda e: self.login())
+        box = tk.Frame(card)
+        box.pack(padx=30, pady=4, fill="x")
+        self.lb = tk.Listbox(box, height=8, font=("Segoe UI", 11), activestyle="dotbox", exportselection=False)
+        sb = ttk.Scrollbar(box, orient="vertical", command=self.lb.yview)
+        self.lb.configure(yscrollcommand=sb.set)
+        self.lb.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        self.lb.bind("<<ListboxSelect>>", lambda e: self._show_selected())
+        self.lb.bind("<Double-Button-1>", lambda e: self.login())
+        self.lb.bind("<Return>", lambda e: self.login())
+        self.sel_label = ctk.CTkLabel(card, text="", anchor="w", text_color="#1F3864", wraplength=620, justify="left")
+        self.sel_label.pack(fill="x", padx=30)
         self.pwd_box = ctk.CTkFrame(card, fg_color="transparent", height=1)
         self.pwd_box.pack(fill="x", padx=30)
         self.pwd_label = ctk.CTkLabel(self.pwd_box, text="Clave de administrador", anchor="w")
@@ -598,10 +610,26 @@ class LoginFrame(ctk.CTkFrame):
 
     def _filter(self):
         palabras = self.search.get().upper().split()
+        actual = self.selected()
         opciones = [k for k in self._units if all(p in k.upper() for p in palabras)]
-        self.unit.configure(values=opciones or ["(sin coincidencias)"])
-        if self.unit.get() not in opciones:
-            self.unit.set(opciones[0] if opciones else "")
+        self.lb.delete(0, "end")
+        for k in opciones:
+            self.lb.insert("end", k)
+        if opciones:
+            i = opciones.index(actual) if actual in opciones else 0
+            self.lb.selection_set(i)
+            self.lb.see(i)
+        self._show_selected(len(opciones))
+
+    def selected(self) -> str:
+        sel = self.lb.curselection() if hasattr(self, "lb") else ()
+        return self.lb.get(sel[0]) if sel else ""
+
+    def _show_selected(self, n: Optional[int] = None):
+        n = self.lb.size() if n is None else n
+        txt = self.selected()
+        self.sel_label.configure(text=(f"Seleccionado: {txt}" if txt else "Sin coincidencias") +
+                                 f"   ({n} de {len(self._units)} unidades)")
         p = self.app.c.params
         self.anio.configure(text=f"Año de formulación: {p.anio} · Fecha límite: {s(p.raw.get('fecha_limite'))}")
 
@@ -616,7 +644,7 @@ class LoginFrame(ctk.CTkFrame):
 
     def login(self):
         role = self.role.get()
-        uid = self._units.get(self.unit.get())
+        uid = self._units.get(self.selected())
         if role == ROLE_ADMIN:
             if self.pwd.get() != s(self.app.db.parametros().get("clave_admin") or "DPDI"):
                 messagebox.showerror("Acceso", "Clave de administrador incorrecta.")
@@ -775,7 +803,7 @@ class InicioTab(ctk.CTkScrollableFrame):
         uid = self.app.uid
         area = self.c.unidad(uid)["codigo_area"]
         q = self._quantities()
-        lines = [f"Unidad: {area} · Año {self.c.anio}", ""]
+        lines = [f"Unidad: {self.c.unidad_display(self.c.unidad(uid))} · Año {self.c.anio}", ""]
         for k, n in q.items():
             existing = len(self.c._existing_codes(k, uid))
             if n:
@@ -2052,7 +2080,9 @@ class App(ctk.CTk):
         bar.pack(fill="x")
         if self.role == ROLE_ADMIN:
             ctk.CTkLabel(bar, text="Unidad en formulación:").pack(side="left", padx=(8, 4), pady=5)
-            self.unit_sel = ctk.CTkComboBox(bar, width=340, state="readonly", command=self._unit_changed)
+            self.unit_sel = ctk.CTkButton(bar, text="", width=340, anchor="w", fg_color="white", text_color="black",
+                                          hover_color="#E8EEF7", border_width=1, border_color="gray60",
+                                          command=self._pick_unit)
             self.unit_sel.pack(side="left", pady=5)
             self._reload_units()
         ctk.CTkButton(bar, text="Exportar Ficha Resumen Firmada (.pdf)", width=10, fg_color="#A93226",
@@ -2086,10 +2116,13 @@ class App(ctk.CTk):
     def _reload_units(self):
         units = sorted(self.c.unidades(), key=lambda u: s(u["codigo_area"]))
         self._units = {self.c.unidad_display(u): u["id"] for u in units}
-        self.unit_sel.configure(values=list(self._units))
-        for k, v in self._units.items():
-            if v == self.uid:
-                self.unit_sel.set(k)
+        actual = next((k for k, v in self._units.items() if v == self.uid), "")
+        self.unit_sel.configure(text=("▾ " + (actual if len(actual) <= 48 else actual[:46] + "…")) if actual else
+                                "▾ Seleccionar unidad")
+
+    def _pick_unit(self):
+        SearchDialog(self, "Cambiar unidad orgánica (código / centro de costo / unidad)", list(self._units),
+                     self._unit_changed)
 
     def _unit_changed(self, value):
         self.uid = self._units.get(value)

@@ -78,6 +78,15 @@ Comando PyInstaller exacto que ejecuta el script:
 pyinstaller --noconfirm --clean --onefile --windowed --name Sistema_POA_DPDI --collect-all customtkinter --collect-data reportlab --hidden-import openpyxl --hidden-import pandas main_app.py
 ```
 
+### Si `build_exe.bat` muestra «Error durante la construcción»
+
+* `PermissionError: Acceso denegado … dist\Sistema_POA_DPDI.exe`: el sistema estaba abierto o el antivirus bloqueaba el
+  ejecutable anterior. La versión actual del `.bat` cierra el programa y reemplaza el `.exe` automáticamente; si aun así
+  falla, cierre el sistema y vuelva a ejecutarlo.
+* La advertencia de Windows «No se pudo comprobar el editor» aparece porque el `.bat` no tiene firma digital: pulse
+  **Ejecutar**.
+* Los datos no se pierden al reconstruir: la base está en `%APPDATA%\Sistema_POA_DPDI\poa_dpdi.sqlite3`.
+
 ## Reglas de cálculo replicadas
 
 * **Costo/Tarifa (S/)** `=IF(F="","",IF(E="US$",F*TC,F))`; **Total** `= Cantidad × Costo S/`.

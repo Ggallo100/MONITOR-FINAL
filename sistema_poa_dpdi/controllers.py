@@ -428,11 +428,11 @@ class POAController:
     def unidad_display(self, u: dict) -> str:
         """Código de área + centro de costo + nombre de la unidad orgánica.
 
-        Ej.: «201702 CENTRO DE IDIOMAS - LIMA SUR», «40110204 DIRECCION DE CAMPUS LIMA NORTE - LIMA NORTE».
+        Ej.: «101109 - CENTRO DE INNOVACIÓN - Lima Sur», «201702 - CENTRO DE IDIOMAS - LIMA SUR».
         Si ambos textos son idénticos (o uno está vacío) se muestra una sola vez."""
         codigo, cc, nombre = s(u.get("codigo_area")), s(u.get("centro_costo")), s(u.get("nombre_unidad"))
-        partes = [cc, nombre] if norm_key(cc) != norm_key(nombre) else [cc]
-        return f"{codigo} {' - '.join(p for p in partes if p)}".strip()
+        partes = [codigo, cc, nombre] if norm_key(cc) != norm_key(nombre) else [codigo, cc]
+        return " - ".join(p for p in partes if p)
 
     def macrogrupos(self) -> list[str]:
         """Macrogrupos oficiales + los registrados por la DPDI en las unidades."""
