@@ -440,6 +440,13 @@ class POAController:
                 data[k] = to_float(data[k], 0.0) or 0.0
         if "genera_ingresos" in data:
             data["genera_ingresos"] = 1 if str(data["genera_ingresos"]).strip() in ("1", "True", "Sí", "true") else 0
+        otra = self.db.query_one("SELECT id, nombre_unidad FROM unidades_organicas WHERE codigo_area=?",
+                                 (data["codigo_area"],))
+        if otra and uid and otra["id"] != uid:
+            raise ValueError(f"El código de área {data['codigo_area']} ya pertenece a «{otra['nombre_unidad']}». "
+                             "Use otro código o seleccione esa unidad en la tabla para modificarla.")
+        if otra and not uid:
+            uid = otra["id"]  # el código de área identifica a la unidad: se actualiza en lugar de duplicarla
         return self.db.upsert("unidades_organicas", data, uid)
 
     def delete_unidad(self, uid: int) -> None:
@@ -1480,14 +1487,7 @@ class POAController:
             "revisado_cargo": s(fr["F180"].value) or None, "revisado_fecha": s(fr["F182"].value) or None,
         }
         if "Parámetros" in sheets:
-            pm = wb["Parámetros"]
-            for key, cell in (("techo_iniciativas", "C11"), ("techo_funcionamiento", "C12"),
-                              ("techo_otras_operativas", "C13"), ("techo_inversion", "C14"),
-                              ("meta_ingresos_func", "C16"), ("meta_resultado_otras", "C17"),
-                              ("meta_resultado_propias", "C18")):
-                v = to_float(pm[cell].value)
-                if v is not None:
-                    unidad_data[key] = v
+            unidad_data.update(self._techos_desde_parametros(wb["Parámetros"]))
         if uid is None:
             area, macro = self._area_desde_archivo(path)
             base_area, n = area, 1
@@ -1870,10 +1870,9 @@ class POAController:
                 if not data["nombre_unidad"]:
                     rep["avisos"].append(f"Unidades_Techos fila {row['_fila']}: falta el nombre de la unidad.")
                     continue
-                uid = rid("unidades_organicas", row["id"])
-                if uid is None:
-                    old = self.db.query_one("SELECT id FROM unidades_organicas WHERE codigo_area=?", (area,))
-                    uid = old["id"] if old else None
+                # El código de área identifica a la unidad (los ID pueden venir de otra instalación).
+                old = self.db.query_one("SELECT id FROM unidades_organicas WHERE codigo_area=?", (area,))
+                uid = old["id"] if old else rid("unidades_organicas", row["id"])  # ID sin área: cambio de código
                 if uid:
                     self.db.update("unidades_organicas", uid, data, commit=False)
                 else:
@@ -2044,12 +2043,47 @@ class POAController:
         return rep
 
     # --------------------------------------------------- importar parámetros
-    def import_parametros(self, path: str | Path) -> dict:
+    @staticmethod
+    def _techos_desde_parametros(pm) -> dict:
+        """Techos y metas de la sección B de «Parámetros» (y sub-techos F11:G13 del libro exportado)."""
+        out = {}
+        for key, cell in (("techo_iniciativas", "C11"), ("techo_funcionamiento", "C12"),
+                          ("techo_otras_operativas", "C13"), ("techo_inversion", "C14"),
+                          ("meta_ingresos_func", "C16"), ("meta_resultado_otras", "C17"),
+                          ("meta_resultado_propias", "C18")):
+            v = to_float(pm[cell].value)
+            if v is not None:
+                out[key] = v
+        for r in range(11, 14):
+            lab = norm_key(pm.cell(r, 6).value)
+            key = ("techo_planilla_docente" if "PLANILLA DOCENTE" in lab else
+                   "techo_planilla_adm" if "PLANILLA ADMINISTRATIVA" in lab else
+                   "techo_marketing" if "MARKETING" in lab else None)
+            v = to_float(pm.cell(r, 7).value)
+            if key and v is not None:
+                out[key] = v
+        return out
+
+    def import_parametros(self, path: str | Path, unidad_id: Optional[int] = None) -> dict:
+        """Importa parámetros y catálogos de una Ficha_Formulacion_POA y actualiza los techos de su unidad."""
         import openpyxl
+        path = Path(path)
         wb = openpyxl.load_workbook(path, data_only=True)
         if "Parámetros" not in wb.sheetnames:
             raise ValueError("El archivo no contiene la hoja «Parámetros».")
-        return self.import_parametros_wb(wb)
+        rep = self.import_parametros_wb(wb)
+        pm = wb["Parámetros"]
+        nombre = s(wb["Ficha_Resumen"]["C6"].value) if "Ficha_Resumen" in wb.sheetnames else ""
+        cc = s(wb["Ficha_Resumen"]["C7"].value) if "Ficha_Resumen" in wb.sheetnames else ""
+        uid = unidad_id or self._match_unidad(nombre or s(pm["C8"].value), cc, path)
+        techos = self._techos_desde_parametros(pm)
+        if uid and techos:
+            self.db.update("unidades_organicas", uid, techos)
+            rep["techos_unidad"] = f"{self.unidad(uid)['codigo_area']}: {len(techos)} techos/metas actualizados"
+        elif techos:
+            rep["techos_unidad"] = ("no se identificó la unidad del archivo; importe la ficha con «Importar Ficha "
+                                    "Excel» o registre la unidad")
+        return rep
 
     def import_parametros_wb(self, wb) -> dict:
         ws = wb["Parámetros"]
@@ -2131,10 +2165,15 @@ class POAController:
         def upsert_niif(code, partida, categoria, tipo):
             if not partida:
                 return 0
-            old = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE partida_rubro=? AND tipo_flujo=? "
-                                    "ORDER BY id LIMIT 1", (partida, tipo))
-            data = {"codigo_niif": code or "SIN-CODIGO", "partida_rubro": partida, "categoria": categoria,
-                    "tipo_flujo": tipo}
+            code = code or "SIN-CODIGO"
+            # Una misma partida puede tener varias cuentas (p. ej. MATERIAL DE OFICINA 6941010100 y 6941020100):
+            # se identifica por (código, partida, tipo) para no sobrescribir otra cuenta.
+            old = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE codigo_niif=? AND partida_rubro=? "
+                                    "AND tipo_flujo=?", (code, partida, tipo))
+            if old is None:
+                old = self.db.query_one("SELECT id FROM catalogo_niif_partidas WHERE codigo_niif='SIN-CODIGO' AND "
+                                        "partida_rubro=? AND tipo_flujo=?", (partida, tipo))
+            data = {"codigo_niif": code, "partida_rubro": partida, "categoria": categoria, "tipo_flujo": tipo}
             if old:
                 self.db.update("catalogo_niif_partidas", old["id"], data)
             else:

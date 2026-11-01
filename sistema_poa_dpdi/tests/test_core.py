@@ -239,6 +239,30 @@ class FlujoCompletoTest(unittest.TestCase):
         self.c.import_plantilla_parametros(edit)
         self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas"), n_cuentas + 1)
 
+    def test_unidades_y_techos_al_importar(self):
+        # «Nuevo» con un código de área existente actualiza la unidad (no IntegrityError)
+        uid = self.c.save_unidad({"codigo_area": "tst", "nombre_unidad": "UNIDAD DE PRUEBA", "techo_iniciativas": 777})
+        self.assertEqual(uid, self.uid)
+        self.assertEqual(self.c.unidad(self.uid)["techo_iniciativas"], 777)
+        otra = self.c.save_unidad({"codigo_area": "OTRA", "nombre_unidad": "OTRA UNIDAD"})
+        with self.assertRaises(ValueError):
+            self.c.save_unidad({"codigo_area": "TST", "nombre_unidad": "OTRA UNIDAD"}, otra)
+        # Los techos y sub-techos viajan en el libro exportado y se recuperan al importarlo
+        self.db.update("unidades_organicas", self.uid, {"techo_planilla_docente": 1234, "techo_marketing": 700})
+        libro = OfficialWorkbookExporter(self.c, self.uid).export(Path(self.tmp.name) / "libro.xlsx")
+        self.db.update("unidades_organicas", self.uid, {"techo_iniciativas": 1, "techo_planilla_docente": 0,
+                                                        "techo_marketing": 0})
+        n = self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas")
+        rep = self.c.import_parametros(libro)  # partidas repetidas con distinto código no deben chocar
+        self.assertIn("TST", rep["techos_unidad"])
+        u = self.c.unidad(self.uid)
+        self.assertEqual((u["techo_iniciativas"], u["techo_planilla_docente"], u["techo_marketing"]),
+                         (777, 1234, 700))
+        self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM catalogo_niif_partidas"), n)
+        self.db.update("unidades_organicas", self.uid, {"techo_planilla_docente": 0})
+        self.c.import_ficha(libro)
+        self.assertEqual(self.c.unidad(self.uid)["techo_planilla_docente"], 1234)
+
 
 if __name__ == "__main__":
     unittest.main()
