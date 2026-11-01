@@ -573,13 +573,17 @@ class LoginFrame(ctk.CTkFrame):
         self.role = ctk.CTkSegmentedButton(card, values=[ROLE_UNIT, ROLE_ADMIN], command=self._role_changed)
         self.role.set(ROLE_UNIT)
         self.role.pack(padx=30, pady=6, fill="x")
-        ctk.CTkLabel(card, text="Unidad orgánica / Centro de costo", anchor="w").pack(fill="x", padx=30, pady=(12, 0))
-        self.unit = ctk.CTkComboBox(card, values=[], width=520, state="readonly")
+        ctk.CTkLabel(card, text="Unidad orgánica (código de área · unidad orgánica · centro de costo)",
+                     anchor="w").pack(fill="x", padx=30, pady=(12, 0))
+        self.search = ctk.CTkEntry(card, width=620, placeholder_text="Buscar por código, unidad o centro de costo…")
+        self.search.pack(padx=30, pady=(4, 2))
+        self.search.bind("<KeyRelease>", lambda e: self._filter())
+        self.unit = ctk.CTkComboBox(card, values=[], width=620, state="readonly")
         self.unit.pack(padx=30, pady=4)
         self.pwd_box = ctk.CTkFrame(card, fg_color="transparent", height=1)
         self.pwd_box.pack(fill="x", padx=30)
         self.pwd_label = ctk.CTkLabel(self.pwd_box, text="Clave de administrador", anchor="w")
-        self.pwd = ctk.CTkEntry(self.pwd_box, show="•", width=520)
+        self.pwd = ctk.CTkEntry(self.pwd_box, show="•", width=620)
         self.pwd.bind("<Return>", lambda e: self.login())
         ctk.CTkButton(card, text="Ingresar", height=38, command=self.login).pack(padx=30, pady=(18, 8), fill="x")
         self.anio = ctk.CTkLabel(card, text="", text_color="gray40")
@@ -587,11 +591,17 @@ class LoginFrame(ctk.CTkFrame):
         self.refresh()
 
     def refresh(self):
-        units = self.app.c.unidades()
+        units = sorted(self.app.c.unidades(), key=lambda u: s(u["codigo_area"]))
         self._units = {self.app.c.unidad_display(u): u["id"] for u in units}
-        self.unit.configure(values=list(self._units))
-        if self._units and not self.unit.get():
-            self.unit.set(next(iter(self._units)))
+        self.search.delete(0, "end")
+        self._filter()
+
+    def _filter(self):
+        palabras = self.search.get().upper().split()
+        opciones = [k for k in self._units if all(p in k.upper() for p in palabras)]
+        self.unit.configure(values=opciones or ["(sin coincidencias)"])
+        if self.unit.get() not in opciones:
+            self.unit.set(opciones[0] if opciones else "")
         p = self.app.c.params
         self.anio.configure(text=f"Año de formulación: {p.anio} · Fecha límite: {s(p.raw.get('fecha_limite'))}")
 
@@ -2076,7 +2086,7 @@ class App(ctk.CTk):
         self._tab_changed()
 
     def _reload_units(self):
-        units = self.c.unidades()
+        units = sorted(self.c.unidades(), key=lambda u: s(u["codigo_area"]))
         self._units = {self.c.unidad_display(u): u["id"] for u in units}
         self.unit_sel.configure(values=list(self._units))
         for k, v in self._units.items():

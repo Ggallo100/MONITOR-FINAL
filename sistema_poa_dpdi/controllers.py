@@ -426,7 +426,16 @@ class POAController:
         return u
 
     def unidad_display(self, u: dict) -> str:
-        return f"{u['codigo_area']} · {u['nombre_unidad']}"
+        """Código de área + nombre de la unidad orgánica + centro de costo.
+
+        Ej.: «201702 CENTRO DE IDIOMAS - LIMA SUR». Si el centro de costo repite el nombre de la unidad
+        solo se agrega lo que lo diferencia (p. ej. «… COMUNICACIÓN - PRESENCIAL»)."""
+        codigo, nombre, cc = s(u.get("codigo_area")), s(u.get("nombre_unidad")), s(u.get("centro_costo"))
+        sufijo = cc
+        if cc and norm_key(cc).startswith(norm_key(nombre)):
+            sufijo = cc[len(nombre):].strip(" -–·") if len(cc) > len(nombre) else ""
+        texto = f"{codigo} {nombre}".strip()
+        return f"{texto} - {sufijo}" if sufijo else texto
 
     def save_unidad(self, data: dict, uid: Optional[int] = None) -> int:
         data = dict(data)
