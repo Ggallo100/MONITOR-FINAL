@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Cambiar clave{% endblock %}
+{% block contenido %}
+<section class="tarjeta angosta">
+  <h2>Cambiar clave</h2>
+  {% if usuario.debe_cambiar_clave %}<p class="alerta alerta-aviso">Por seguridad, cambie la clave asignada antes de continuar.</p>{% endif %}
+  <form method="post" class="formulario">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>Clave actual<input name="actual" type="password" required autocomplete="current-password"></label>
+    <label>Nueva clave<input name="nueva" type="password" required minlength="8" autocomplete="new-password"></label>
+    <label>Repetir nueva clave<input name="repetir" type="password" required minlength="8" autocomplete="new-password"></label>
+    <p class="nota">Mínimo 8 caracteres, con letras y números.</p>
+    <button class="btn btn-primario">Guardar nueva clave</button>
+  </form>
+</section>
+{% endblock %}

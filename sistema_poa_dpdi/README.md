@@ -33,6 +33,69 @@ La base se crea al primer arranque en `sistema_poa_dpdi/data/` (en el `.exe`: `%
 * **Administrador DPDI**: clave inicial `DPDI` (cámbiela en *Parámetros → Datos generales*). Acceso total al mantenedor
   de parámetros, techos, cuentas NIIF, catálogos, carga masiva y cambio de unidad.
 
+## Versión web multiusuario (empresarial)
+
+Un servidor guarda una sola base de datos y cada usuario ingresa desde su navegador con su propia clave. Usa el mismo
+núcleo que la versión de escritorio (`controllers.py`, `exporter.py`): cálculos, directrices, importación de fichas y
+exportación del libro oficial, la BD NIIF y el PDF son idénticos.
+
+| Archivo | Contenido |
+|---|---|
+| `web/app.py` | Servidor Flask: acceso con clave, roles, permisos por unidad, flujo de revisión, API, cargas y descargas. |
+| `web/schemas.py` | Formularios y tablas de cada pantalla (mismos campos y reglas que el escritorio). |
+| `web/templates/`, `web/static/` | Interfaz web (HTML, CSS y JavaScript sin dependencias externas). |
+| `servidor_web.py` | Inicia el servidor de producción (Waitress). |
+| `iniciar_servidor_web.bat` | Instalación e inicio en un servidor Windows de la intranet. |
+| `Dockerfile`, `docker-compose.yml` | Despliegue en un servidor Linux o en la nube. |
+| `respaldo_web.py` | Respaldo consistente de la base (programable a diario). |
+| `tests/test_web.py` | Pruebas de seguridad, permisos, flujo de revisión, cargas y descargas. |
+
+**Roles**
+
+* **Administrador DPDI**: todas las unidades, parámetros, catálogos, usuarios, identidad gráfica, bitácora, tablero,
+  respaldos y BD consolidada de todas las unidades.
+* **Consulta DPDI**: ve todas las unidades, el tablero y descarga reportes, sin modificar.
+* **Responsable de unidad orgánica**: formula solo las unidades que el administrador le asigna.
+
+**Flujo de la ficha**: `Borrador` → *Enviar a revisión* → `Enviada` (solo lectura para la unidad) → la DPDI la
+`Aprueba` u `Observa` (con comentario; la unidad vuelve a editar). El administrador también puede *Reabrir*.
+
+**Seguridad**: claves cifradas (hash), cambio obligatorio de la clave inicial, bloqueo de 15 minutos tras 5 intentos
+fallidos, sesión de 8 horas, protección CSRF, permisos verificados en el servidor para cada registro, bitácora con
+usuario e IP, archivos temporales eliminados tras cada carga o descarga.
+
+**Identidad gráfica**: *Administración → Parámetros e identidad gráfica* permite subir el logo y definir los colores
+(cabecera, menú, botones) y la tipografía institucional sin tocar el código.
+
+### Instalación en un servidor Windows (intranet)
+
+1. Instale Python 3.11+ en el servidor (marcando «Add python.exe to PATH»).
+2. Copie la carpeta `sistema_poa_dpdi` y ejecute `iniciar_servidor_web.bat`.
+3. La clave inicial del usuario `admin` queda en `datos_web\credenciales_iniciales.txt`. Ingrese en
+   `http://NOMBRE-DEL-SERVIDOR:8080`, cámbiela y borre ese archivo.
+4. Cree los usuarios en *Administración → Usuarios y accesos* y asigne las unidades a cada responsable.
+5. Para acceso desde fuera de la red o con candado (HTTPS), publique el servidor detrás de IIS, Nginx o Apache con
+   certificado y defina `POA_HTTPS=1` y `POA_PROXY=<IP del proxy>`.
+
+### Instalación con Docker
+
+```bash
+docker compose up -d
+```
+
+Los datos quedan en la carpeta `datos/` (volumen). Respaldo: *Administración → Parámetros → Respaldo completo*, o
+`python respaldo_web.py` programado a diario.
+
+### Migrar los datos de la versión de escritorio
+
+Defina `POA_DB_PATH` con la ruta de una **copia** de `%APPDATA%\Sistema_POA_DPDI\poa_dpdi.sqlite3`: al iniciar, el
+servidor agrega las tablas de usuarios y estados sin perder la información.
+
+### Capacidad
+
+La base SQLite en modo WAL admite decenas de usuarios trabajando a la vez (formulación por unidades, escrituras
+breves). Si la universidad prevé cientos de usuarios simultáneos, conviene migrar la capa de datos a PostgreSQL.
+
 ## Plantilla de Parámetros y Catálogos (actualización masiva)
 
 En *1. Parámetros y catálogos NIIF* (rol Administrador DPDI):

@@ -292,6 +292,27 @@ CREATE TABLE IF NOT EXISTS app_meta (
     valor TEXT
 );
 
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    nombre TEXT DEFAULT '',
+    correo TEXT DEFAULT '',
+    rol TEXT NOT NULL DEFAULT 'RESPONSABLE' CHECK (rol IN ('ADMIN', 'CONSULTA', 'RESPONSABLE')),
+    password_hash TEXT NOT NULL,
+    activo INTEGER NOT NULL DEFAULT 1,
+    debe_cambiar_clave INTEGER NOT NULL DEFAULT 1,
+    intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+    bloqueado_hasta TEXT DEFAULT '',
+    ultimo_acceso TEXT DEFAULT '',
+    creado TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS usuario_unidades (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    unidad_id INTEGER NOT NULL REFERENCES unidades_organicas(id) ON DELETE CASCADE,
+    PRIMARY KEY (usuario_id, unidad_id)
+);
+
 CREATE TABLE IF NOT EXISTS bitacora (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha TEXT DEFAULT (datetime('now','localtime')),
@@ -313,12 +334,20 @@ DETALLE_TABLES = {
 class Database:
     """Envoltura ligera de sqlite3 con utilidades CRUD genéricas."""
 
-    def __init__(self, path: Optional[os.PathLike | str] = None, seed: bool = True):
+    def __init__(self, path: Optional[os.PathLike | str] = None, seed: bool = True, init: bool = True):
+        """init=False abre una conexión a una base ya inicializada (uso por petición en el servidor web)."""
         self.path = str(path or default_db_path())
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.execute("PRAGMA busy_timeout = 30000")
         self._columns_cache: dict[str, list[str]] = {}
+        if not init:
+            return
+        try:
+            self.conn.execute("PRAGMA journal_mode = WAL")  # lectores concurrentes + un escritor (multiusuario)
+        except sqlite3.DatabaseError:
+            pass
         self.create_schema()
         if seed:
             from catalogs_seed import seed_database
@@ -329,6 +358,12 @@ class Database:
     MIGRATIONS = [
         ("catalogo_niif_partidas", "descripcion", "TEXT DEFAULT ''"),
         ("catalogos_estrategicos", "eje", "TEXT DEFAULT ''"),
+        # Versión web: flujo de revisión de la ficha y trazabilidad
+        ("unidades_organicas", "estado_ficha", "TEXT DEFAULT 'Borrador'"),
+        ("unidades_organicas", "estado_obs", "TEXT DEFAULT ''"),
+        ("unidades_organicas", "estado_fecha", "TEXT DEFAULT ''"),
+        ("unidades_organicas", "estado_usuario", "TEXT DEFAULT ''"),
+        ("bitacora", "ip", "TEXT DEFAULT ''"),
     ]
 
     def create_schema(self) -> None:
@@ -425,8 +460,9 @@ class Database:
             sql += f" ORDER BY {order}"
         return self.query(sql, params)
 
-    def log(self, usuario: str, accion: str, detalle: str = "") -> None:
-        self.conn.execute("INSERT INTO bitacora (usuario, accion, detalle) VALUES (?,?,?)", (usuario, accion, detalle))
+    def log(self, usuario: str, accion: str, detalle: str = "", ip: str = "") -> None:
+        self.conn.execute("INSERT INTO bitacora (usuario, accion, detalle, ip) VALUES (?,?,?,?)",
+                          (usuario, accion, detalle, ip))
         self.conn.commit()
 
     def close(self) -> None:

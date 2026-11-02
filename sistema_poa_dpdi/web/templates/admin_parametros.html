@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titulo %}Parámetros{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Parámetros, plantilla e identidad gráfica</h1><p>Datos generales, supuestos de formulación, actualización masiva y apariencia del sistema.</p></div>
+<section class="tarjeta">
+  <h2>Actualización masiva</h2>
+  <div class="fila-form">
+    <a class="btn btn-primario" href="{{ url_for('desc_plantilla') }}">⬇ Descargar plantilla de Parámetros y Catálogos (.xlsx)</a>
+    <form class="fila-form" data-carga="/cargas/plantilla-parametros"><input type="file" name="archivo" accept=".xlsx" required><button class="btn">⬆ Importar plantilla</button></form>
+    <form class="fila-form" data-carga="/cargas/parametros-ficha"><input type="file" name="archivo" accept=".xlsx,.xlsm" required><button class="btn">Importar parámetros desde una Ficha Excel</button></form>
+    <a class="btn" href="{{ url_for('desc_bd', alcance='todas') }}">⬇ BD NIIF consolidada de todas las unidades</a>
+    <a class="btn" href="{{ url_for('desc_respaldo') }}">⬇ Respaldo completo de la base de datos</a>
+  </div>
+</section>
+<div class="grilla-2">
+  <section class="tarjeta"><h2>Datos generales y supuestos</h2><div id="p-form"></div><button class="btn btn-primario" id="p-guardar">Guardar parámetros</button></section>
+  <section class="tarjeta">
+    <h2>Identidad gráfica</h2>
+    <p class="nota">Colores, tipografía y logo de la institución. Se aplican a todos los usuarios.</p>
+    <div id="t-form"></div>
+    <button class="btn btn-primario" id="t-guardar">Guardar apariencia</button>
+    <form class="fila-form" data-carga="/cargas/logo"><strong>Logo (PNG, SVG, JPG)</strong><input type="file" name="archivo" accept=".png,.svg,.jpg,.jpeg,.webp" required><button class="btn">Subir logo</button></form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script id="cfg" type="application/json">{{ {'generales': generales, 'extra': extra}|tojson }}</script>
+<script>POA.paginaParametros(JSON.parse(document.getElementById('cfg').textContent));</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+# docker compose up -d   →   http://SERVIDOR:8080
+# La clave inicial de «admin» queda en el volumen: datos/credenciales_iniciales.txt (o defina POA_ADMIN_PASSWORD).
+services:
+  poa-web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      POA_SESION_HORAS: "8"
+      # POA_HTTPS: "1"            # actívelo si publica el sistema detrás de un proxy HTTPS
+      # POA_PROXY: "172.17.0.1"   # IP del proxy inverso de confianza
+    volumes:
+      - ./datos:/datos

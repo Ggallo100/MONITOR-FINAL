@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Inicio{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Inicio y códigos</h1><p>Datos de la unidad, estado de la ficha, generación de códigos y actividades de funcionamiento.</p></div>
+<div class="grilla-3">
+  <section class="tarjeta">
+    <h2>Estado de la ficha</h2>
+    <div id="estado"></div>
+  </section>
+  <section class="tarjeta">
+    <h2>Generador automático de códigos</h2>
+    <p class="nota">Cantidad de actividades aprobadas por tipo. Los códigos se prefijan con el código de área en la base consolidada.</p>
+    <div id="codigos"></div>
+  </section>
+  <section class="tarjeta">
+    <h2>Importar Ficha Excel (.xlsx)</h2>
+    <p class="nota">Carga una Ficha_Formulacion_POA existente y reemplaza los registros del año de la unidad.</p>
+    <form id="form-importar" class="formulario">
+      <input type="file" name="archivo" accept=".xlsx,.xlsm" required>
+      {% if es_admin %}
+      <label><select name="destino"><option value="actual">Cargar en la unidad actual</option><option value="archivo">Identificar la unidad por el archivo (o crearla)</option></select></label>
+      <label class="check"><input type="checkbox" name="parametros" value="1"> Actualizar también parámetros y catálogos</label>
+      {% endif %}
+      <button class="btn btn-primario" {% if not editable and not es_admin %}disabled{% endif %}>Importar</button>
+    </form>
+  </section>
+</div>
+<div class="grilla-2">
+  <section class="tarjeta"><h2>Datos de la unidad (Ficha_Resumen)</h2><div id="datos-unidad"></div></section>
+  <section class="tarjeta">
+    <h2>Correr Actividades de Funcionamiento</h2>
+    <p class="nota">Inserta la plantilla base de ingresos y egresos fijos (planillas, CTS, depreciación, servicios básicos, provisiones) prorrateando 1/12 (0.08333333) en Ene–Dic.</p>
+    <div id="plantilla" class="tabla-scroll alto-bajo"></div>
+    <label class="check"><input type="checkbox" id="reemplazar" checked> Reemplazar las filas generadas previamente por la plantilla</label>
+    <button id="btn-correr" class="btn btn-primario ancho">▶ Correr Actividades de Funcionamiento</button>
+    <div id="correr-info" class="nota"></div>
+  </section>
+</div>
+<section class="tarjeta"><h2>Consumo de techos presupuestales</h2><div id="techos"></div></section>
+{% endblock %}
+{% block scripts %}<script>POA.paginaInicio();</script>{% endblock %}

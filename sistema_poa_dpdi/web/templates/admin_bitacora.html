@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block titulo %}Bitácora{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Bitácora de actividad</h1><p>Últimos 1 000 eventos: ingresos, cambios, importaciones y descargas, con usuario e IP.</p></div>
+<section class="tarjeta"><input class="buscador" id="b-buscar" placeholder="Buscar por usuario, acción o detalle…"><div id="b-tabla" class="tabla-scroll alto"></div></section>
+{% endblock %}
+{% block scripts %}<script>POA.paginaBitacora();</script>{% endblock %}

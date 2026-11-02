@@ -6,3 +6,5 @@ dist/
 *.spec
 data/
 *.sqlite3
+datos_web/
+datos/

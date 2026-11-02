@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titulo %}Funcionamiento{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Actividades de funcionamiento</h1><p>Ingresos y egresos regulares por cuenta NIIF. Marque «x» o el factor de distribución en los meses de pago o cobro.</p></div>
+<div class="pestanas"><button data-tab="FE" class="activa">Egresos (Funcionamiento_Egr)</button><button data-tab="FI">Ingresos (Funcionamiento_Ing)</button></div>
+<div id="f-info" class="resumen-techo"></div>
+<section class="panel">
+  <div class="panel-form tarjeta">
+    <div class="panel-cab"><h2 id="f-titulo"></h2><span id="f-modo" class="chip"></span></div>
+    <div id="f-form"></div>
+    <div class="botones" data-edicion>
+      <button class="btn" data-accion="f-nuevo">Nuevo</button>
+      <button class="btn btn-primario" data-accion="f-guardar">Guardar</button>
+      <button class="btn" data-accion="f-duplicar">Duplicar</button>
+      <button class="btn btn-peligro" data-accion="f-eliminar">Eliminar</button>
+      <button class="btn" data-accion="f-renumerar">Renumerar códigos</button>
+    </div>
+  </div>
+  <div class="panel-tabla tarjeta"><input class="buscador" id="f-buscar" placeholder="Buscar…"><div id="f-tabla" class="tabla-scroll"></div></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script id="cfg" type="application/json">{{ flat|tojson }}</script>
+<script>POA.paginaFuncionamiento(JSON.parse(document.getElementById('cfg').textContent));</script>
+{% endblock %}

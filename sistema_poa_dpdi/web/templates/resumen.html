@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}Ficha resumen{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Ficha resumen y auditoría de directrices</h1><p id="r-cab"></p></div>
+<div class="botones">
+  <a class="btn btn-primario" href="{{ url_for('desc_pdf') }}">⬇ Ficha resumen firmada (.pdf)</a>
+  <a class="btn" href="{{ url_for('desc_libro') }}">⬇ Libro oficial POA (.xlsx) + BD NIIF</a>
+  <a class="btn" href="{{ url_for('desc_bd') }}">⬇ BD NIIF de la unidad</a>
+</div>
+<div id="r-semaforo"></div>
+<div id="r-secciones"></div>
+{% endblock %}
+{% block scripts %}<script>POA.paginaResumen();</script>{% endblock %}

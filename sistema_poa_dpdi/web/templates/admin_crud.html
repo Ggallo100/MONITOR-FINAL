@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}{{ cfg.titulo }}{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>{{ cfg.titulo }}</h1>{% if cfg.ayuda %}<p>{{ cfg.ayuda }}</p>{% endif %}</div>
+{% if entidad == 'cuentas' %}
+<form class="tarjeta fila-form" data-carga="/cargas/niif"><strong>Carga masiva NIIF (.xlsx / .csv)</strong><input type="file" name="archivo" accept=".xlsx,.csv" required><button class="btn">Cargar</button></form>
+{% endif %}
+{% if cfg.filtro %}
+<div class="tarjeta fila-form"><strong>Catálogo:</strong><select id="filtro">{% for o in cfg.filtro.options %}<option value="{{ o.value }}">{{ o.label }}</option>{% endfor %}</select></div>
+{% endif %}
+<section class="panel">
+  <div class="panel-form tarjeta">
+    <div class="panel-cab"><h2>Registro</h2><span id="a-modo" class="chip"></span></div>
+    <div id="a-form"></div>
+    <div class="botones">
+      <button class="btn" data-accion="a-nuevo">Nuevo</button>
+      <button class="btn btn-primario" data-accion="a-guardar">Guardar</button>
+      <button class="btn btn-peligro" data-accion="a-eliminar">Eliminar</button>
+    </div>
+  </div>
+  <div class="panel-tabla tarjeta"><input class="buscador" id="a-buscar" placeholder="Buscar…"><div id="a-tabla" class="tabla-scroll"></div><div id="a-cuenta" class="nota"></div></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script id="cfg" type="application/json">{{ {'entidad': entidad, 'cfg': cfg}|tojson }}</script>
+<script>POA.paginaAdmin(JSON.parse(document.getElementById('cfg').textContent));</script>
+{% endblock %}

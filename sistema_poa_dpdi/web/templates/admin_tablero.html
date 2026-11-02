@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block titulo %}Tablero DPDI{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Tablero de seguimiento DPDI</h1><p>Estado de las fichas, consumo de techos y directrices observadas en todas las unidades.</p></div>
+<div id="t-kpis" class="kpis"></div>
+<section class="tarjeta"><input class="buscador" id="t-buscar" placeholder="Buscar unidad, macrogrupo, responsable o estado…"><div id="t-tabla" class="tabla-scroll alto"></div></section>
+{% endblock %}
+{% block scripts %}<script>POA.paginaTablero();</script>{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}{{ cfg.titulo }}{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>{{ cfg.titulo }}</h1><p>{{ cfg.ayuda }} <span class="hoja">Hojas: {{ cfg.hoja }}</span></p></div>
+<div id="resumen-techo" class="resumen-techo"></div>
+<section class="panel">
+  <div class="panel-form tarjeta">
+    <div class="panel-cab"><h2>Registro maestro</h2><span id="m-modo" class="chip"></span></div>
+    <div id="m-form"></div>
+    <div class="botones" data-edicion>
+      <button class="btn" data-accion="m-nuevo">Nuevo</button>
+      <button class="btn btn-primario" data-accion="m-guardar">Guardar</button>
+      <button class="btn" data-accion="m-duplicar">Duplicar</button>
+      {% if kind == 'AP' %}<button class="btn" data-accion="m-ingreso">Generar ingreso desde tarifa</button>{% endif %}
+      <button class="btn btn-peligro" data-accion="m-eliminar">Eliminar</button>
+    </div>
+  </div>
+  <div class="panel-tabla tarjeta"><input class="buscador" id="m-buscar" placeholder="Buscar…"><div id="m-tabla" class="tabla-scroll"></div></div>
+</section>
+<section class="panel">
+  <div class="panel-form tarjeta">
+    <div class="panel-cab"><h2 id="d-titulo">Detalle — seleccione un registro maestro</h2><span id="d-modo" class="chip"></span></div>
+    <div id="d-form"></div>
+    <div class="botones" data-edicion>
+      <button class="btn" data-accion="d-nuevo">Nuevo ítem</button>
+      <button class="btn btn-primario" data-accion="d-guardar">Guardar ítem</button>
+      <button class="btn" data-accion="d-duplicar">Duplicar ítem</button>
+      <button class="btn btn-peligro" data-accion="d-eliminar">Eliminar ítem</button>
+    </div>
+  </div>
+  <div class="panel-tabla tarjeta"><div id="d-info" class="nota"></div><div id="d-tabla" class="tabla-scroll"></div></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script id="cfg" type="application/json">{{ {'kind': kind, 'master': cfg, 'detalle_fields': detalle_fields, 'detalle_columns': detalle_columns}|tojson }}</script>
+<script>POA.paginaMaestroDetalle(JSON.parse(document.getElementById('cfg').textContent));</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <title>{% block titulo %}POA · DPDI{% endblock %} — Sistema POA DPDI</title>
+  {% if tema.tema_fuente %}
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ tema.tema_fuente|replace(' ', '+') }}:wght@400;600;700&display=swap">
+  {% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <style>
+    :root {
+      --primario: {{ tema.tema_primario }};
+      --secundario: {{ tema.tema_secundario }};
+      --acento: {{ tema.tema_acento }};
+      {% if tema.tema_fuente %}--fuente: "{{ tema.tema_fuente }}", system-ui, sans-serif;{% endif %}
+    }
+  </style>
+</head>
+<body>
+{% if usuario %}
+<header class="cabecera">
+  <a class="marca" href="{{ url_for('inicio') }}">
+    {% if hay_logo %}<img src="{{ url_for('marca_logo') }}" alt="Logo institucional">{% else %}<span class="marca-texto">POA<span>·</span>DPDI</span>{% endif %}
+    <span class="marca-sistema">Sistema de Formulación Presupuestal y Operativa POA<small>Proceso Gestión Estratégica GD-DO-01 · Insumo PP-PR-02</small></span>
+  </a>
+  <div class="usuario">
+    <span class="usuario-nombre">{{ usuario.nombre or usuario.usuario }}</span>
+    <span class="usuario-rol">{{ roles[usuario.rol] }}</span>
+    <a href="{{ url_for('cambiar_clave') }}">Cambiar clave</a>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="enlace">Salir</button></form>
+  </div>
+</header>
+<div class="barra-unidad">
+  <div class="unidad-actual">
+    <span class="etiqueta">Unidad en formulación</span>
+    <button id="btn-unidad" class="selector-unidad" type="button" {% if unidades|length < 2 %}disabled{% endif %}>
+      {{ unidad.display if unidad else 'Sin unidades asignadas' }} {% if unidades|length > 1 %}<span class="flecha">▾</span>{% endif %}
+    </button>
+    {% if unidad %}<span class="chip estado-{{ (unidad.estado_ficha or 'Borrador')|lower }}">{{ unidad.estado_ficha or 'Borrador' }}</span>
+    <span class="meta">{{ unidad.macrogrupo }} · Año {{ anio }}</span>{% endif %}
+  </div>
+  {% if unidad %}
+  <div class="acciones-unidad">
+    <a class="btn btn-claro" href="{{ url_for('desc_libro') }}">⬇ Libro oficial + BD NIIF (.xlsx)</a>
+    <a class="btn btn-claro" href="{{ url_for('desc_pdf') }}">⬇ Ficha resumen (.pdf)</a>
+  </div>
+  {% endif %}
+</div>
+<nav class="menu">
+  {% set items = [('inicio', '/', 'Inicio'), ('iniciativas', '/iniciativas', 'Iniciativas'),
+                  ('funcionamiento', '/funcionamiento', 'Funcionamiento'), ('otras-operativas', '/otras-operativas', 'Otras operativas'),
+                  ('actividades-propias', '/actividades-propias', 'Actividades propias'), ('inversion', '/inversion', 'Inversión'),
+                  ('resumen', '/resumen', 'Ficha resumen')] %}
+  {% for key, href, label in items %}<a href="{{ href }}" class="{{ 'activo' if pagina == key }}">{{ label }}</a>{% endfor %}
+  {% if usuario.rol in ('ADMIN', 'CONSULTA') %}<a href="/admin/tablero" class="{{ 'activo' if pagina == 'tablero' }}">Tablero DPDI</a>{% endif %}
+  {% if es_admin %}
+  <details class="submenu {{ 'activo' if pagina in ('parametros','unidades','cuentas','catalogos','costos','plantilla','usuarios','bitacora') }}">
+    <summary>Administración</summary>
+    <div>
+      <a href="/admin/parametros">Parámetros e identidad gráfica</a>
+      <a href="/admin/unidades">Unidades y techos</a>
+      <a href="/admin/cuentas">Cuentas NIIF + Partidas GG</a>
+      <a href="/admin/catalogos">Catálogos estratégicos</a>
+      <a href="/admin/costos">Costos de referencia</a>
+      <a href="/admin/plantilla">Plantilla de funcionamiento</a>
+      <a href="/admin/usuarios">Usuarios y accesos</a>
+      <a href="/admin/bitacora">Bitácora</a>
+    </div>
+  </details>
+  {% endif %}
+</nav>
+{% endif %}
+<main class="contenido">
+  {% with mensajes = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in mensajes %}<div class="alerta alerta-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% if usuario and unidad and not editable and pagina not in ('tablero','parametros','unidades','cuentas','catalogos','costos','plantilla','usuarios','bitacora','resumen') %}
+  <div class="alerta alerta-aviso">Modo de solo lectura:
+    {% if usuario.rol == 'CONSULTA' %}su rol es de consulta.{% else %}la ficha está en estado «{{ unidad.estado_ficha }}». La DPDI debe observarla o reabrirla para editar.{% endif %}
+  </div>
+  {% endif %}
+  {% block contenido %}{% endblock %}
+</main>
+<div id="toasts"></div>
+<div id="modal" class="modal" hidden><div class="modal-caja"><div class="modal-cab"><h3 id="modal-titulo"></h3><button class="cerrar" data-cerrar>×</button></div><div id="modal-cuerpo"></div></div></div>
+<footer class="pie">Dirección de Planificación y Desarrollo Institucional (DPDI) · Sistema POA {{ anio or '' }}</footer>
+<script>window.POA_CTX = {{ {'unidades': unidades, 'editable': editable, 'rol': usuario.rol if usuario else None,
+  'uid': unidad.id if unidad else None}|tojson }};</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
