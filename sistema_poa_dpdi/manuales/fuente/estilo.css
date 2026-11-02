@@ -1,0 +1,91 @@
+/* Estilo común de los manuales del Sistema POA - DPDI (paleta del portal institucional) */
+:root {
+  --naranja: #FF6600; --texto: #333333; --gris: #F6F4F2; --crema: #FFF4E8; --lila: #CCC7FF;
+  --divisor: #D4D5D0; --suave: #6B6B6B;
+}
+@page {
+  size: A4; margin: 22mm 18mm 20mm 18mm;
+  @top-left { font-family: Arial, sans-serif; font-size: 7.5pt; color: #6B6B6B; }
+  @top-right { content: "Universidad Autónoma del Perú"; font-family: Arial, sans-serif; font-size: 7.5pt; color: #FF6600; font-weight: bold; }
+  @bottom-left { font-family: Arial, sans-serif; font-size: 7.5pt; color: #6B6B6B; border-top: .3mm solid #D4D5D0; }
+  @bottom-right { content: "Página " counter(page) " de " counter(pages); font-family: Arial, sans-serif; font-size: 7.5pt; color: #6B6B6B; border-top: .3mm solid #D4D5D0; }
+}
+@page :first { margin: 0; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: var(--texto); font-size: 10.5pt; line-height: 1.5; margin: 0; }
+
+/* Portada */
+.portada { height: 297mm; display: flex; flex-direction: column; page-break-after: always; position: relative; overflow: hidden; }
+.portada .franja { background: var(--naranja); color: #fff; padding: 34mm 22mm 20mm; position: relative; }
+.portada .franja::after { content: ""; position: absolute; left: 0; right: 0; bottom: -18mm; height: 18mm; background: var(--naranja);
+  clip-path: polygon(0 0, 100% 0, 100% 15%, 0 100%); }
+.portada .institucion { font-size: 11pt; letter-spacing: .08em; text-transform: uppercase; opacity: .95; }
+.portada h1 { font-size: 30pt; line-height: 1.15; margin: 10mm 0 4mm; font-weight: 700; }
+.portada .sub { font-size: 14pt; font-weight: 400; }
+.portada .cuerpo { padding: 34mm 22mm 0; flex: 1; }
+.portada .publico { display: inline-block; background: var(--lila); color: var(--texto); font-weight: 600; padding: 2mm 5mm; border-radius: 20px; }
+.portada .datos { margin-top: 10mm; border-left: 4px solid var(--naranja); padding-left: 5mm; color: var(--suave); }
+.portada .datos b { color: var(--texto); }
+.portada .pie { background: var(--gris); padding: 8mm 22mm; font-size: 9pt; color: var(--suave); border-top: 3px solid var(--naranja); }
+
+/* Índice */
+.indice { page-break-after: always; }
+.indice ol { padding-left: 9mm; }
+.indice li { margin: 1.5mm 0; }
+.indice a { color: var(--texto); text-decoration: none; }
+.indice li::marker { color: var(--naranja); font-weight: 700; }
+
+/* Títulos con trazo de pincel naranja como en el portal */
+h1.cap { font-size: 19pt; margin: 0 0 5mm; padding-top: 2mm; position: relative; page-break-before: always; }
+h1.cap:first-of-type { page-break-before: auto; }
+h1.cap .num { color: var(--naranja); margin-right: 3mm; }
+h1.cap::after { content: ""; display: block; width: 32mm; height: 3.2mm; margin-top: 2mm; background: var(--naranja);
+  clip-path: polygon(0 35%, 8% 10%, 60% 0, 100% 20%, 96% 70%, 40% 100%, 3% 85%); }
+h2 { font-size: 13pt; margin: 7mm 0 2mm; color: var(--texto); border-bottom: 1px solid var(--divisor); padding-bottom: 1mm; page-break-after: avoid; }
+h3 { font-size: 11pt; margin: 5mm 0 1.5mm; color: var(--naranja); page-break-after: avoid; }
+p { margin: 1.5mm 0 2.5mm; }
+a { color: #C24E00; }
+code, kbd { font-family: Consolas, "Courier New", monospace; font-size: 9.2pt; background: var(--gris); padding: 0 1.2mm; border-radius: 3px; }
+kbd { border: 1px solid var(--divisor); }
+pre { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: #2B2B2B; color: #F4F4F4; padding: 3mm 4mm; border-radius: 4px;
+  border-left: 4px solid var(--naranja); white-space: pre-wrap; word-break: break-word; page-break-inside: avoid; margin: 2mm 0 3mm; }
+ul, ol { margin: 1mm 0 3mm; padding-left: 6mm; }
+li { margin: .8mm 0; }
+li::marker { color: var(--naranja); }
+
+/* Figuras */
+figure { margin: 3mm 0 5mm; page-break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; max-height: 120mm; border: 1px solid var(--divisor); border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+figure.media img { max-width: 70%; }
+figure.chica img { max-width: 50%; }
+figcaption { font-size: 8.8pt; color: var(--suave); margin-top: 1.5mm; }
+figcaption b { color: var(--naranja); }
+
+/* Tablas */
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.4pt; page-break-inside: auto; }
+tr { page-break-inside: avoid; }
+th { background: var(--gris); text-align: left; padding: 1.8mm 2.2mm; border-bottom: 2px solid var(--naranja); font-weight: 700; }
+td { padding: 1.6mm 2.2mm; border-bottom: 1px solid var(--divisor); vertical-align: top; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+table.libre td:first-child { white-space: normal; }
+
+/* Recuadros */
+.nota, .alerta, .tip { border-radius: 4px; padding: 2.5mm 4mm; margin: 3mm 0; page-break-inside: avoid; }
+.nota { background: var(--crema); border-left: 4px solid var(--naranja); }
+.alerta { background: #FDECEA; border-left: 4px solid #C62828; }
+.tip { background: #EEECFF; border-left: 4px solid #6C63D9; }
+.nota b:first-child, .alerta b:first-child, .tip b:first-child { display: block; margin-bottom: .5mm; }
+
+/* Pasos numerados */
+ol.pasos { counter-reset: paso; list-style: none; padding-left: 0; }
+ol.pasos > li { counter-increment: paso; position: relative; padding-left: 10mm; margin: 2.2mm 0; }
+ol.pasos > li::before { content: counter(paso); position: absolute; left: 0; top: .2mm; width: 6.5mm; height: 6.5mm; border-radius: 50%;
+  background: var(--naranja); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 6.5mm; }
+
+.chip { display: inline-block; padding: 0 2.5mm; border-radius: 10px; font-size: 8.8pt; font-weight: 600; }
+.chip.borrador { background: #ECECEC; } .chip.enviada { background: #FFE3CC; } .chip.observada { background: #FDECEA; color: #A32020; }
+.chip.aprobada { background: #E3F4E6; color: #1E6B30; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+.firma { margin-top: 10mm; font-size: 9pt; color: var(--suave); }

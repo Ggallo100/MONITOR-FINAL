@@ -41,7 +41,9 @@ ROLES = {"ADMIN": "Administrador DPDI", "CONSULTA": "Consulta DPDI", "RESPONSABL
 ESTADOS_EDITABLES = ("Borrador", "Observada", "", None)
 MAX_INTENTOS = 5
 BLOQUEO_MIN = 15
-TEMA_DEFECTO = {"tema_primario": "#1F3864", "tema_secundario": "#2E5597", "tema_acento": "#C8102E", "tema_fuente": ""}
+# Paleta del portal institucional (www.autonoma.pe): naranja de marca, títulos gris oscuro y botones naranjas.
+TEMA_DEFECTO = {"tema_primario": "#FF6600", "tema_secundario": "#333333", "tema_acento": "#FF6600", "tema_fuente": ""}
+MESES_CORTOS = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SET", "OCT", "NOV", "DIC"]
 KINDS = ("INI", "OO", "AP", "INV")
 SLUG_KIND = {"iniciativas": "INI", "otras-operativas": "OO", "actividades-propias": "AP", "inversion": "INV"}
 
@@ -256,8 +258,14 @@ def _logo_path() -> Optional[Path]:
 
 def _contexto_plantillas():
     u = usuario() if session.get("user_id") else None
+    prm = db().parametros()
+    cierre = ""
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s(prm.get("fecha_limite")))
+    if m:
+        cierre = f"{int(m.group(3))} {MESES_CORTOS[int(m.group(2)) - 1]}"
     ctx = {"csrf": session.get("csrf", ""), "usuario": u, "roles": ROLES, "tema": tema(),
-           "hay_logo": _logo_path() is not None, "anio": None, "unidad": None, "unidades": [],
+           "hay_logo": _logo_path() is not None, "anio": s(prm.get("anio_formulacion")), "cierre": cierre,
+           "institucion": s(prm.get("institucion")), "unidad": None, "unidades": [],
            "editable": False, "es_admin": bool(u and u["rol"] == "ADMIN")}
     if u:
         c = ctrl()
@@ -519,6 +527,20 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         if entidad not in ents:
             abort(404)
         return render_template("admin_crud.html", pagina=entidad, entidad=entidad, cfg=ents[entidad])
+
+    @app.get("/ayuda")
+    def ayuda():
+        return render_template("ayuda.html", pagina="ayuda", manuales=_manuales_visibles())
+
+    @app.get("/ayuda/<nombre>")
+    def ayuda_manual(nombre):
+        disponibles = {m["archivo"]: m for m in _manuales_visibles()}
+        if nombre not in disponibles:
+            abort(404)
+        ruta = BASE / "manuales" / "pdf" / nombre
+        if not ruta.exists():
+            abort(404)
+        return send_file(ruta, mimetype="application/pdf", download_name=nombre)
 
     # --------------------------------------------------------- API: contexto
     @app.post("/api/contexto")
@@ -1049,6 +1071,24 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         return jsonify(ok=True)
 
 
+MANUALES = [
+    {"archivo": "Manual_Usuario_POA_DPDI.pdf", "titulo": "Manual del usuario",
+     "descripcion": "Para responsables de unidad orgánica: acceso, formulación de cada tipo de actividad, ficha resumen, "
+                    "directrices y envío a revisión.", "roles": ("RESPONSABLE", "CONSULTA", "ADMIN")},
+    {"archivo": "Manual_Administrador_POA_DPDI.pdf", "titulo": "Manual del administrador DPDI",
+     "descripcion": "Configuración del año, parámetros, catálogos, usuarios, revisión de fichas, tablero, reportes y "
+                    "respaldos.", "roles": ("ADMIN",)},
+    {"archivo": "Manual_Tecnologia_POA_DPDI.pdf", "titulo": "Manual técnico (Tecnologías de la Información)",
+     "descripcion": "Arquitectura, instalación en laptop y servidor, servicio de Windows, HTTPS, respaldos, seguridad "
+                    "y solución de problemas.", "roles": ("ADMIN",)},
+]
+
+
+def _manuales_visibles() -> list[dict]:
+    rol = usuario()["rol"]
+    return [m for m in MANUALES if rol in m["roles"]]
+
+
 def _kind(kind: str) -> None:
     if kind not in KINDS:
         abort(404)
@@ -1164,6 +1204,7 @@ def _guardar_usuario(d: dict, rid: Optional[int]) -> int:
         if not _clave_valida(clave):
             raise ValueError("La clave debe tener al menos 8 caracteres, con letras y números.")
         data["password_hash"] = generate_password_hash(clave)
+        data.update(intentos_fallidos=0, bloqueado_hasta="")  # restablecer la clave también desbloquea
     elif not rid:
         raise ValueError("Asigne una clave inicial al nuevo usuario.")
     if rid:

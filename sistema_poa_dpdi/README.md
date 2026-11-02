@@ -96,6 +96,32 @@ servidor agrega las tablas de usuarios y estados sin perder la información.
 La base SQLite en modo WAL admite decenas de usuarios trabajando a la vez (formulación por unidades, escrituras
 breves). Si la universidad prevé cientos de usuarios simultáneos, conviene migrar la capa de datos a PostgreSQL.
 
+### Manuales y soporte
+
+Los manuales en PDF están en `manuales/pdf/` y se publican en la página **Ayuda** del sistema según el rol:
+
+| Manual | Dirigido a | Visible para |
+|---|---|---|
+| `Manual_Usuario_POA_DPDI.pdf` | Responsables de unidad | Todos |
+| `Manual_Administrador_POA_DPDI.pdf` | DPDI | Administrador |
+| `Manual_Tecnologia_POA_DPDI.pdf` | Tecnologías de la Información (instalación temporal en laptop, servidor Windows/Linux/Docker, HTTPS, migración, respaldos, seguridad) | Administrador |
+
+Las fuentes están en `manuales/fuente/` (HTML) con las capturas de `manuales/img/`. Para regenerar los PDF:
+`node manuales/generar_pdf.js` (Node.js + Playwright con Chromium).
+
+Herramienta de consola para TI (emergencias de acceso), con las mismas variables `POA_DATA_DIR`/`POA_DB_PATH`
+que el servidor:
+
+```bash
+python administrar_usuarios.py listar
+python administrar_usuarios.py restablecer USUARIO   # clave temporal, desbloquea la cuenta
+python administrar_usuarios.py desbloquear USUARIO
+python administrar_usuarios.py crear-admin USUARIO
+```
+
+La identidad gráfica viene con la paleta del portal institucional (naranja `#FF6600`, títulos `#333333`); la DPDI
+debe subir el **logo oficial** en *Parámetros e identidad gráfica*.
+
 ## Plantilla de Parámetros y Catálogos (actualización masiva)
 
 En *1. Parámetros y catálogos NIIF* (rol Administrador DPDI):

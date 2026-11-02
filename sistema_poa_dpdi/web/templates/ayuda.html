@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titulo %}Ayuda{% endblock %}
+{% block contenido %}
+<div class="titulo-pagina"><h1>Ayuda y manuales</h1><p>Descargue el manual que corresponde a su rol. También puede solicitar soporte a la DPDI.</p></div>
+<div class="grilla-3">
+  {% for m in manuales %}
+  <section class="tarjeta manual">
+    <h2>{{ m.titulo }}</h2>
+    <p class="nota">{{ m.descripcion }}</p>
+    <a class="btn btn-primario" href="{{ url_for('ayuda_manual', nombre=m.archivo) }}" target="_blank">⬇ Abrir manual (PDF)</a>
+  </section>
+  {% endfor %}
+</div>
+<section class="tarjeta">
+  <h2>Guía rápida</h2>
+  <ol class="guia">
+    <li>Verifique arriba la <strong>unidad en formulación</strong> y su estado (Borrador, Enviada, Observada o Aprobada).</li>
+    <li>En <strong>Inicio</strong> complete los datos de la unidad y, si corresponde, ejecute «Correr Actividades de Funcionamiento».</li>
+    <li>Registre sus <strong>iniciativas</strong> (eje → objetivo anual → OE automático) y su detalle por partida.</li>
+    <li>Complete <strong>funcionamiento</strong>, <strong>otras operativas</strong>, <strong>actividades propias</strong> e <strong>inversión</strong>.</li>
+    <li>Revise la <strong>Ficha resumen</strong>: las 11 directrices deben mostrar «Cumple» y los techos «Dentro del techo».</li>
+    <li>En <strong>Inicio</strong> pulse «Enviar a revisión de la DPDI».</li>
+  </ol>
+</section>
+{% endblock %}

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual técnico - Sistema POA DPDI</title>
+<link rel="stylesheet" href="estilo.css">
+<style>@page { @top-left { content: "Sistema POA - DPDI · Manual técnico (TI)"; } @bottom-left { content: "DPDI · {{FECHA}}"; } }</style>
+<style>
+  .arq { display: flex; align-items: center; justify-content: center; gap: 3mm; margin: 4mm 0 2mm; font-size: 9pt; }
+  .arq .caja { border: 1.5px solid var(--naranja); border-radius: 6px; padding: 3mm; text-align: center; background: #fff; min-width: 32mm; }
+  .arq .caja.gris { border-color: var(--divisor); background: var(--gris); }
+  .arq .caja b { display: block; color: var(--naranja); margin-bottom: 1mm; }
+  .arq .flecha { color: var(--naranja); font-size: 14pt; font-weight: 700; }
+  .arq .caja small { color: var(--suave); display: block; }
+</style>
+</head>
+<body>
+
+<section class="portada">
+  <div class="franja">
+    <div class="institucion">Universidad Autónoma del Perú · Dirección de Planeamiento y Desarrollo Institucional</div>
+    <h1>Manual técnico de instalación y operación</h1>
+    <div class="sub">Sistema de Formulación Presupuestal y Operativa POA - DPDI · versión web</div>
+  </div>
+  <div class="cuerpo">
+    <span class="publico">Dirigido a: área de Tecnologías de la Información</span>
+    <div class="datos">
+      <p><b>Propósito:</b> describir la arquitectura, la instalación temporal en una laptop de la DPDI, la instalación definitiva en
+        un servidor de la universidad, la migración de datos entre ambas, la publicación segura con HTTPS, los respaldos, el monitoreo,
+        las actualizaciones y la solución de problemas.</p>
+      <p><b>Versión del documento:</b> 1.0 · {{FECHA}}</p>
+      <p><b>Contacto funcional:</b> Dirección de Planeamiento y Desarrollo Institucional (DPDI)</p>
+    </div>
+  </div>
+  <div class="pie">Documento de uso interno. Los nombres de equipos, rutas, dominios y direcciones IP de este manual son ejemplos y deben reemplazarse por los definidos por TI.</div>
+</section>
+
+<section class="indice">
+  <h1 class="cap">Contenido</h1>
+  <ol>
+    <li><a href="#c1">Arquitectura y componentes</a></li>
+    <li><a href="#c2">Requisitos</a></li>
+    <li><a href="#c3">Fase 1: instalación temporal en la laptop de la DPDI</a></li>
+    <li><a href="#c4">Fase 2: instalación en un servidor de la universidad</a></li>
+    <li><a href="#c5">Publicación con HTTPS (proxy inverso)</a></li>
+    <li><a href="#c6">Migración de la laptop al servidor</a></li>
+    <li><a href="#c7">Variables de configuración</a></li>
+    <li><a href="#c8">Respaldos y restauración</a></li>
+    <li><a href="#c9">Seguridad</a></li>
+    <li><a href="#c10">Monitoreo y registros</a></li>
+    <li><a href="#c11">Administración de usuarios desde el servidor</a></li>
+    <li><a href="#c12">Actualización de versiones</a></li>
+    <li><a href="#c13">Solución de problemas</a></li>
+    <li><a href="#c14">Anexos: estructura de archivos y comandos rápidos</a></li>
+  </ol>
+</section>
+
+<h1 class="cap" id="c1"><span class="num">1</span>Arquitectura y componentes</h1>
+<p>El sistema es una aplicación web Python (Flask) servida por <b>Waitress</b>, un servidor WSGI de producción multiplataforma.
+  Los datos se guardan en una base <b>SQLite</b> en modo WAL dentro de una carpeta de datos. Los usuarios solo necesitan un navegador.</p>
+<div class="arq">
+  <div class="caja gris"><b>Navegadores</b>Responsables, DPDI<small>Chrome · Edge · Firefox</small></div>
+  <div class="flecha">→</div>
+  <div class="caja gris"><b>Proxy HTTPS</b>IIS / Nginx<small>opcional · puerto 443</small></div>
+  <div class="flecha">→</div>
+  <div class="caja"><b>servidor_web.py</b>Waitress + Flask<small>puerto 8080 · 8 hilos</small></div>
+  <div class="flecha">→</div>
+  <div class="caja"><b>Carpeta de datos</b>poa_dpdi_web.sqlite3<small>logo · clave de sesión · respaldos</small></div>
+</div>
+<p style="text-align:center;color:var(--suave);font-size:9pt">La misma lógica de negocio (cálculos, directrices, exportación Excel/PDF) es compartida con la versión de escritorio.</p>
+<table class="libre">
+  <tr><th>Componente</th><th>Descripción</th></tr>
+  <tr><td><code>servidor_web.py</code></td><td>Arranca Waitress. Parámetros <code>--host</code>, <code>--port</code>, <code>--threads</code> o variables <code>POA_HOST</code>, <code>POA_PORT</code>, <code>POA_THREADS</code>.</td></tr>
+  <tr><td><code>web/</code></td><td>Aplicación Flask: rutas, plantillas HTML, estilos y JavaScript (sin dependencias externas en el navegador).</td></tr>
+  <tr><td><code>controllers.py</code>, <code>exporter.py</code>, <code>database.py</code></td><td>Reglas de negocio, exportación del libro oficial y PDF, esquema y migraciones de la base.</td></tr>
+  <tr><td><code>iniciar_servidor_web.bat</code></td><td>Instalador/arranque para Windows: crea el entorno virtual, instala dependencias e inicia el servidor.</td></tr>
+  <tr><td><code>respaldo_web.py</code></td><td>Respaldo consistente en caliente de la base, con rotación.</td></tr>
+  <tr><td><code>administrar_usuarios.py</code></td><td>Herramienta de consola para listar, desbloquear, restablecer claves o crear administradores.</td></tr>
+  <tr><td><code>Dockerfile</code>, <code>docker-compose.yml</code></td><td>Despliegue en contenedor (opcional).</td></tr>
+  <tr><td><code>manuales/</code></td><td>Manuales en PDF publicados en la página «Ayuda» del sistema.</td></tr>
+</table>
+<h2>Carpeta de datos (<code>POA_DATA_DIR</code>)</h2>
+<table class="libre">
+  <tr><th>Archivo</th><th>Contenido</th></tr>
+  <tr><td><code>poa_dpdi_web.sqlite3</code></td><td>Base de datos (más <code>-wal</code> y <code>-shm</code> mientras el servidor está activo).</td></tr>
+  <tr><td><code>secret_key.txt</code></td><td>Clave de firma de las sesiones. Si se pierde, todos los usuarios deben volver a ingresar.</td></tr>
+  <tr><td><code>credenciales_iniciales.txt</code></td><td>Clave inicial de <code>admin</code> (solo en la primera ejecución). Bórrelo tras el primer ingreso.</td></tr>
+  <tr><td><code>marca/</code></td><td>Logo institucional cargado por la DPDI.</td></tr>
+  <tr><td><code>respaldos/</code></td><td>Destino por defecto de <code>respaldo_web.py</code>.</td></tr>
+</table>
+
+<h1 class="cap" id="c2"><span class="num">2</span>Requisitos</h1>
+<table class="libre">
+  <tr><th>Elemento</th><th>Laptop temporal</th><th>Servidor institucional</th></tr>
+  <tr><td>Sistema operativo</td><td>Windows 10/11 de 64 bits</td><td>Windows Server 2019/2022, o Linux (Ubuntu 22.04+/RHEL 9), o Docker</td></tr>
+  <tr><td>CPU / RAM</td><td>2 núcleos / 4 GB</td><td>2–4 vCPU / 4–8 GB</td></tr>
+  <tr><td>Disco</td><td>2 GB libres</td><td>10 GB (datos + 60 respaldos diarios)</td></tr>
+  <tr><td>Software</td><td colspan="2">Python 3.11 o superior (3.12 recomendado). Dependencias: <code>requirements-web.txt</code> (Flask, Waitress, pandas, openpyxl, reportlab).</td></tr>
+  <tr><td>Red</td><td>Cable de red a la LAN; puerto TCP 8080 abierto en el firewall</td><td>Registro DNS interno; puerto 443 (HTTPS) en el proxy; 8080 solo local</td></tr>
+  <tr><td>Internet</td><td colspan="2">Solo para instalar dependencias (pip). En operación no se requiere, salvo que la DPDI configure una tipografía de Google Fonts.</td></tr>
+</table>
+<h2>Capacidad</h2>
+<p>SQLite en modo WAL con escrituras breves admite sin problema decenas de usuarios trabajando a la vez, que es el perfil del proceso
+  de formulación (cada responsable trabaja sobre su unidad). Si en el futuro se prevén cientos de usuarios simultáneos o alta
+  disponibilidad, se recomienda migrar la capa de datos a PostgreSQL.</p>
+<div class="alerta"><b>Importante</b>La carpeta de datos debe estar en un <b>disco local</b> del servidor. No la ubique en una unidad de red (SMB/NFS):
+  SQLite puede corromperse con bloqueos de archivo remotos.</div>
+
+<h1 class="cap" id="c3"><span class="num">3</span>Fase 1: instalación temporal en la laptop de la DPDI</h1>
+<p>Mientras se habilita el servidor, el sistema puede funcionar en una laptop de la DPDI conectada a la red de la universidad. Los
+  usuarios ingresan con <code>http://NOMBRE-LAPTOP:8080</code>.</p>
+<h2>3.1 Instalar Python</h2>
+<ol class="pasos">
+  <li>Descargue Python 3.12 (64 bits) desde <code>python.org/downloads</code>.</li>
+  <li>En el instalador marque <b>«Add python.exe to PATH»</b> y pulse «Install Now».</li>
+  <li>Verifique en una ventana de comandos (<kbd>Win</kbd>+<kbd>R</kbd> → <code>cmd</code>):</li>
+</ol>
+<pre>python --version</pre>
+<h2>3.2 Copiar el sistema e iniciarlo</h2>
+<ol class="pasos">
+  <li>Copie la carpeta <code>sistema_poa_dpdi</code> a <code>C:\SistemaPOA\sistema_poa_dpdi</code> (evite rutas dentro de OneDrive o Descargas).</li>
+  <li>Haga doble clic en <code>iniciar_servidor_web.bat</code>. La primera vez crea el entorno <code>.venv</code> e instala las dependencias (requiere internet, 2–5 minutos).</li>
+  <li>La ventana mostrará la dirección, por ejemplo <code>http://LAPTOP-DPDI:8080</code>. <b>No cierre esa ventana</b>: cerrarla detiene el sistema.</li>
+  <li>Abra <code>C:\SistemaPOA\sistema_poa_dpdi\datos_web\credenciales_iniciales.txt</code>, copie la clave de <code>admin</code>,
+    ingrese en <code>http://localhost:8080</code>, cambie la clave y <b>borre el archivo</b>.</li>
+  <li>Entregue la cuenta de administrador a la DPDI (que creará los usuarios desde el sistema).</li>
+</ol>
+<h2>3.3 Permitir el acceso desde otros equipos (firewall)</h2>
+<p>En una ventana de comandos <b>como administrador</b>:</p>
+<pre>netsh advfirewall firewall add rule name="Sistema POA DPDI" dir=in action=allow protocol=TCP localport=8080 profile=domain,private</pre>
+<p>Si Windows muestra la ventana «Firewall de Windows Defender bloqueó algunas características», permita el acceso en redes de
+  dominio/privadas. No habilite el perfil «Público».</p>
+<h2>3.4 Nombre o IP de la laptop</h2>
+<pre>hostname
+ipconfig</pre>
+<p>Pruebe desde otro equipo <code>http://NOMBRE-LAPTOP:8080</code>. Si el nombre no resuelve, use la IPv4 (<code>http://10.x.x.x:8080</code>).
+  Se recomienda que TI <b>reserve la IP</b> de la laptop en el DHCP (o cree un alias DNS, por ejemplo <code>poa-temporal</code>) para que la
+  dirección no cambie.</p>
+<h2>3.5 Evitar suspensión y apagados</h2>
+<pre>powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 15</pre>
+<ul>
+  <li>Mantenga la laptop <b>conectada a la corriente y por cable de red</b>. Configure «Al cerrar la tapa: no hacer nada» (Panel de control → Opciones de energía).</li>
+  <li>Programe las actualizaciones de Windows fuera del horario de formulación (Horas activas).</li>
+  <li>Algunas redes Wi-Fi aíslan a los clientes entre sí; si los usuarios no llegan a la laptop por Wi-Fi, use cable.</li>
+</ul>
+<h2>3.6 Inicio automático (opcional)</h2>
+<p>Para que el sistema arranque al iniciar sesión en la laptop:</p>
+<pre>schtasks /Create /TN "Sistema POA DPDI" /SC ONLOGON /TR "C:\SistemaPOA\sistema_poa_dpdi\iniciar_servidor_web.bat"</pre>
+<h2>3.7 Respaldo diario en la laptop</h2>
+<pre>schtasks /Create /TN "Respaldo POA DPDI" /SC DAILY /ST 19:00 /TR "C:\SistemaPOA\sistema_poa_dpdi\.venv\Scripts\python.exe C:\SistemaPOA\sistema_poa_dpdi\respaldo_web.py --db C:\SistemaPOA\sistema_poa_dpdi\datos_web\poa_dpdi_web.sqlite3 --destino D:\RespaldosPOA --conservar 30"</pre>
+<p>Copie periódicamente la carpeta de respaldos a un repositorio institucional (OneDrive/SharePoint de la DPDI o un servidor de archivos).</p>
+<div class="alerta"><b>Limitaciones de la etapa temporal</b>La disponibilidad depende de que la laptop esté encendida y en red; no hay HTTPS
+  (la comunicación viaja sin cifrar dentro de la LAN). Úsela solo en la red interna y por el menor tiempo posible.</div>
+
+<h1 class="cap" id="c4"><span class="num">4</span>Fase 2: instalación en un servidor de la universidad</h1>
+<p>Elija una de las tres opciones. En todas, la carpeta de datos debe quedar <b>fuera</b> de la carpeta del programa, para que las
+  actualizaciones no la toquen (por ejemplo <code>D:\DatosPOA</code> o <code>/var/lib/poa</code>).</p>
+
+<h2>Opción A — Windows Server como servicio (NSSM)</h2>
+<ol class="pasos">
+  <li>Instale Python 3.12 para todos los usuarios (marque «Add to PATH» e «Install for all users»).</li>
+  <li>Copie el programa a <code>C:\SistemaPOA\sistema_poa_dpdi</code> y cree el entorno:</li>
+</ol>
+<pre>cd C:\SistemaPOA\sistema_poa_dpdi
+python -m venv .venv
+.venv\Scripts\pip install -r requirements-web.txt
+mkdir D:\DatosPOA\logs</pre>
+<ol class="pasos" start="3">
+  <li>Descargue NSSM (<code>nssm.cc</code>), copie <code>nssm.exe</code> a <code>C:\SistemaPOA\</code> y registre el servicio (consola como administrador):</li>
+</ol>
+<pre>set N=C:\SistemaPOA\nssm.exe
+%N% install SistemaPOA "C:\SistemaPOA\sistema_poa_dpdi\.venv\Scripts\python.exe" "C:\SistemaPOA\sistema_poa_dpdi\servidor_web.py"
+%N% set SistemaPOA AppDirectory C:\SistemaPOA\sistema_poa_dpdi
+%N% set SistemaPOA AppEnvironmentExtra POA_DATA_DIR=D:\DatosPOA POA_PORT=8080 PYTHONUNBUFFERED=1
+%N% set SistemaPOA AppStdout D:\DatosPOA\logs\servicio.log
+%N% set SistemaPOA AppStderr D:\DatosPOA\logs\servicio.log
+%N% set SistemaPOA AppRotateFiles 1
+%N% set SistemaPOA AppRotateBytes 10485760
+%N% set SistemaPOA Start SERVICE_AUTO_START
+%N% start SistemaPOA</pre>
+<ol class="pasos" start="4">
+  <li>Recomendado: ejecute el servicio con una cuenta de servicio sin privilegios (por ejemplo <code>svc_poa</code>) con permiso de
+    <b>modificar</b> solo en <code>D:\DatosPOA</code> y de lectura en <code>C:\SistemaPOA</code>:
+    <code>%N% set SistemaPOA ObjectName .\svc_poa CLAVE</code>.</li>
+  <li>Abra el puerto en el firewall solo si no usará proxy HTTPS (ver 3.3); si usa proxy, defina además <code>POA_HOST=127.0.0.1</code>.</li>
+</ol>
+<div class="tip"><b>Sin NSSM</b>Alternativa: Programador de tareas con desencadenador «Al iniciar el sistema», cuenta de servicio, acción
+  <code>python.exe servidor_web.py</code>, carpeta de inicio la del programa y variables definidas a nivel de sistema
+  (<code>setx /M POA_DATA_DIR D:\DatosPOA</code>). En «Configuración», marque reiniciar si la tarea falla.</div>
+
+<h2>Opción B — Linux con systemd</h2>
+<pre>sudo useradd --system --home /var/lib/poa --shell /usr/sbin/nologin poa
+sudo mkdir -p /opt/sistema_poa /var/lib/poa && sudo chown poa:poa /var/lib/poa
+sudo cp -r sistema_poa_dpdi /opt/sistema_poa/
+cd /opt/sistema_poa/sistema_poa_dpdi
+sudo python3.12 -m venv .venv && sudo .venv/bin/pip install -r requirements-web.txt</pre>
+<p>Archivo <code>/etc/systemd/system/sistema-poa.service</code>:</p>
+<pre>[Unit]
+Description=Sistema POA - DPDI (web)
+After=network.target
+
+[Service]
+User=poa
+WorkingDirectory=/opt/sistema_poa/sistema_poa_dpdi
+Environment=POA_DATA_DIR=/var/lib/poa
+Environment=POA_HOST=127.0.0.1
+Environment=POA_PORT=8080
+Environment=POA_HTTPS=1
+Environment=POA_PROXY=127.0.0.1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/sistema_poa/sistema_poa_dpdi/.venv/bin/python servidor_web.py
+Restart=on-failure
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target</pre>
+<pre>sudo systemctl daemon-reload
+sudo systemctl enable --now sistema-poa
+sudo journalctl -u sistema-poa -f</pre>
+
+<h2>Opción C — Docker</h2>
+<pre>cd sistema_poa_dpdi
+mkdir -p datos && sudo chown 1000:1000 datos     # usuario «poa» del contenedor
+docker compose up -d --build
+docker compose logs -f</pre>
+<p>Los datos quedan en <code>./datos</code> (volumen <code>/datos</code>). El contenedor incluye un <i>healthcheck</i> contra <code>/salud</code>
+  y se reinicia automáticamente (<code>restart: unless-stopped</code>). Para HTTPS, descomente <code>POA_HTTPS</code> y <code>POA_PROXY</code>
+  en <code>docker-compose.yml</code> y publique el puerto solo en <code>127.0.0.1:8080:8080</code> si el proxy está en el mismo host.</p>
+
+<h2>Primer arranque en el servidor</h2>
+<ul>
+  <li>Si es una instalación nueva, la clave de <code>admin</code> queda en <code>credenciales_iniciales.txt</code> de la carpeta de datos
+    (o defina <code>POA_ADMIN_PASSWORD</code> antes del primer arranque). Bórrelo después del primer ingreso.</li>
+  <li>Si viene de la laptop, siga el capítulo 6 <b>antes</b> del primer arranque.</li>
+  <li>Verifique <code>http://localhost:8080/salud</code> → <code>{"ok": true, ...}</code>.</li>
+</ul>
+
+<h1 class="cap" id="c5"><span class="num">5</span>Publicación con HTTPS (proxy inverso)</h1>
+<p>En el servidor definitivo, publique el sistema con un nombre DNS y certificado institucional (por ejemplo
+  <code>https://poa.autonoma.pe</code>, nombre referencial). Waitress queda escuchando solo en <code>127.0.0.1:8080</code> y el proxy
+  atiende el puerto 443. Defina en el servicio: <code>POA_HOST=127.0.0.1</code>, <code>POA_HTTPS=1</code> (cookie segura) y
+  <code>POA_PROXY=127.0.0.1</code> (para registrar en la bitácora la IP real del usuario).</p>
+<h2>Nginx</h2>
+<pre>server {
+    listen 80;
+    server_name poa.autonoma.pe;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl http2;
+    server_name poa.autonoma.pe;
+    ssl_certificate     /etc/ssl/certs/poa.crt;
+    ssl_certificate_key /etc/ssl/private/poa.key;
+    client_max_body_size 25m;                  # cargas de Excel
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;               # exportaciones consolidadas
+    }
+}</pre>
+<h2>IIS (Windows Server)</h2>
+<ol class="pasos">
+  <li>Instale los módulos <b>URL Rewrite</b> y <b>Application Request Routing (ARR)</b>. En ARR → «Server Proxy Settings» marque <b>Enable proxy</b>.</li>
+  <li>Cree un sitio con enlace HTTPS (puerto 443) y el certificado institucional. En «URL Rewrite → View Server Variables» agregue
+    <code>HTTP_X_FORWARDED_PROTO</code> a las variables permitidas.</li>
+  <li>Coloque este <code>web.config</code> en la carpeta raíz del sitio:</li>
+</ol>
+<pre>&lt;configuration&gt;
+  &lt;system.webServer&gt;
+    &lt;rewrite&gt;
+      &lt;rules&gt;
+        &lt;rule name="SistemaPOA" stopProcessing="true"&gt;
+          &lt;match url="(.*)" /&gt;
+          &lt;serverVariables&gt;
+            &lt;set name="HTTP_X_FORWARDED_PROTO" value="https" /&gt;
+          &lt;/serverVariables&gt;
+          &lt;action type="Rewrite" url="http://127.0.0.1:8080/{R:1}" /&gt;
+        &lt;/rule&gt;
+      &lt;/rules&gt;
+    &lt;/rewrite&gt;
+    &lt;security&gt;&lt;requestFiltering&gt;&lt;requestLimits maxAllowedContentLength="26214400" /&gt;&lt;/requestFiltering&gt;&lt;/security&gt;
+  &lt;/system.webServer&gt;
+&lt;/configuration&gt;</pre>
+<p>ARR agrega <code>X-Forwarded-For</code> automáticamente. Agregue además una regla de redirección HTTP → HTTPS en el sitio del puerto 80.</p>
+<div class="nota"><b>Acceso desde fuera del campus</b>Se recomienda publicar el sistema solo en la red interna y dar acceso externo mediante la VPN
+  institucional. Si se publica en Internet, hágalo únicamente con HTTPS, detrás del WAF o firewall perimetral de la universidad.</div>
+
+<h1 class="cap" id="c6"><span class="num">6</span>Migración de la laptop al servidor</h1>
+<ol class="pasos">
+  <li>Acuerde con la DPDI una ventana de corte (por ejemplo, fuera del horario laboral) y avise a los usuarios.</li>
+  <li>En la laptop, <b>detenga el servidor</b> (cierre la ventana de <code>iniciar_servidor_web.bat</code> o <kbd>Ctrl</kbd>+<kbd>C</kbd>) y
+    confirme que no quedan procesos <code>python.exe</code> del sistema.</li>
+  <li>Copie la carpeta completa <code>datos_web</code> (base de datos, <code>secret_key.txt</code>, <code>marca/</code>, <code>respaldos/</code>) a la
+    carpeta de datos del servidor (<code>D:\DatosPOA</code>, <code>/var/lib/poa</code> o <code>./datos</code> en Docker). Si existen archivos
+    <code>-wal</code>/<code>-shm</code> con el servidor detenido, cópielos junto con la base.</li>
+  <li>Como alternativa sin detener el servicio, la DPDI puede descargar el <b>Respaldo completo</b> (Parámetros → Actualización masiva) y TI
+    lo copia como <code>poa_dpdi_web.sqlite3</code> en la carpeta de datos del servidor (el logo se vuelve a subir).</li>
+  <li>En Linux/Docker ajuste el propietario: <code>sudo chown -R poa:poa /var/lib/poa</code> (o <code>1000:1000 ./datos</code>).</li>
+  <li>Inicie el servicio en el servidor, verifique <code>/salud</code>, ingrese con un administrador y revise que el tablero muestre las
+    unidades y los estados de ficha esperados.</li>
+  <li>Comunique la nueva dirección. Opcional: deje en la laptop una página o aviso con la nueva URL, o cree un alias DNS con el nombre anterior.</li>
+  <li>Retire la instalación temporal: elimine la tarea programada, la regla de firewall y la carpeta de datos de la laptop
+    (conserve un respaldo cifrado en el repositorio institucional).</li>
+</ol>
+<pre>schtasks /Delete /TN "Sistema POA DPDI" /F
+schtasks /Delete /TN "Respaldo POA DPDI" /F
+netsh advfirewall firewall delete rule name="Sistema POA DPDI"</pre>
+<h2>Migrar datos de la versión de escritorio (.exe)</h2>
+<p>Si alguna unidad trabajó con la versión de escritorio, su base está en <code>%APPDATA%\Sistema_POA_DPDI\poa_dpdi.sqlite3</code>. Puede
+  usarse como base inicial del servidor (copiándola como <code>poa_dpdi_web.sqlite3</code>): al arrancar, el sistema agrega las tablas de
+  usuarios y estados sin perder información. Para incorporar fichas sueltas, es más simple que la DPDI importe el libro Excel exportado
+  por la unidad.</p>
+
+<h1 class="cap" id="c7"><span class="num">7</span>Variables de configuración</h1>
+<table class="libre">
+  <tr><th>Variable</th><th>Valor por defecto</th><th>Descripción</th></tr>
+  <tr><td><code>POA_DATA_DIR</code></td><td><code>./data</code> (<code>datos_web</code> con el .bat)</td><td>Carpeta de datos.</td></tr>
+  <tr><td><code>POA_DB_PATH</code></td><td>DATA_DIR/<code>poa_dpdi_web.sqlite3</code></td><td>Ruta de la base, si se quiere fuera de la carpeta de datos.</td></tr>
+  <tr><td><code>POA_HOST</code></td><td><code>0.0.0.0</code></td><td>Interfaz de escucha. Use <code>127.0.0.1</code> detrás de un proxy.</td></tr>
+  <tr><td><code>POA_PORT</code></td><td><code>8080</code></td><td>Puerto TCP.</td></tr>
+  <tr><td><code>POA_THREADS</code></td><td><code>8</code></td><td>Hilos de Waitress (peticiones simultáneas).</td></tr>
+  <tr><td><code>POA_HTTPS</code></td><td><code>0</code></td><td><code>1</code> marca la cookie de sesión como segura (solo HTTPS).</td></tr>
+  <tr><td><code>POA_PROXY</code></td><td>(vacío)</td><td>IP del proxy inverso de confianza; habilita <code>X-Forwarded-For/Proto</code>.</td></tr>
+  <tr><td><code>POA_SESION_HORAS</code></td><td><code>8</code></td><td>Duración máxima de la sesión.</td></tr>
+  <tr><td><code>POA_ADMIN_PASSWORD</code></td><td>(aleatoria)</td><td>Clave inicial de <code>admin</code> en una instalación nueva.</td></tr>
+  <tr><td><code>POA_SECRET_KEY</code></td><td><code>secret_key.txt</code></td><td>Clave de firma de sesiones (si se prefiere gestionarla como secreto).</td></tr>
+</table>
+<p>Valores fijos de la aplicación: bloqueo de 15 minutos tras 5 intentos fallidos; tamaño máximo de archivo cargado 25 MB; clave mínima
+  de 8 caracteres con letras y números.</p>
+
+<h1 class="cap" id="c8"><span class="num">8</span>Respaldos y restauración</h1>
+<h2>Respaldo automático</h2>
+<p><code>respaldo_web.py</code> usa la API de respaldo de SQLite: obtiene una copia consistente <b>aunque haya usuarios conectados</b> y conserva
+  los últimos N archivos (<code>poa_dpdi_AAAAMMDD_HHMMSS.sqlite3</code>).</p>
+<pre>REM Windows Server - diario a las 21:00 con la cuenta SYSTEM
+schtasks /Create /TN "Respaldo POA DPDI" /SC DAILY /ST 21:00 /RU SYSTEM /TR "C:\SistemaPOA\sistema_poa_dpdi\.venv\Scripts\python.exe C:\SistemaPOA\sistema_poa_dpdi\respaldo_web.py --db D:\DatosPOA\poa_dpdi_web.sqlite3 --destino E:\RespaldosPOA --conservar 60"</pre>
+<pre># Linux - crontab del usuario poa (crontab -e -u poa)
+0 21 * * * cd /opt/sistema_poa/sistema_poa_dpdi &amp;&amp; .venv/bin/python respaldo_web.py --db /var/lib/poa/poa_dpdi_web.sqlite3 --destino /var/backups/poa --conservar 60
+
+# Docker
+0 21 * * * cd /ruta/sistema_poa_dpdi &amp;&amp; docker compose exec -T poa-web python respaldo_web.py --conservar 60</pre>
+<ul>
+  <li>Incluya la carpeta de respaldos y <code>marca/</code> en la política de copias de la universidad (copia fuera del servidor).</li>
+  <li>Durante la etapa de formulación considere dos respaldos diarios (13:00 y 21:00).</li>
+  <li>No copie el archivo <code>.sqlite3</code> en uso con el Explorador o <code>cp</code> mientras el servicio está activo: use siempre <code>respaldo_web.py</code>.</li>
+</ul>
+<h2>Restauración</h2>
+<ol class="pasos">
+  <li>Detenga el servicio (<code>nssm stop SistemaPOA</code>, <code>systemctl stop sistema-poa</code> o <code>docker compose stop</code>).</li>
+  <li>Renombre la base actual (por ejemplo <code>poa_dpdi_web.sqlite3.dañada</code>) y elimine <code>poa_dpdi_web.sqlite3-wal</code> y <code>-shm</code>.</li>
+  <li>Copie el respaldo elegido como <code>poa_dpdi_web.sqlite3</code> en la carpeta de datos.</li>
+  <li>Inicie el servicio y verifique con un administrador. Informe a la DPDI la fecha y hora del respaldo restaurado (los cambios posteriores deben volver a registrarse).</li>
+</ol>
+<p>Verificación de integridad de un archivo (opcional):</p>
+<pre>python -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('PRAGMA integrity_check').fetchone()[0])" RUTA\respaldo.sqlite3</pre>
+
+<h1 class="cap" id="c9"><span class="num">9</span>Seguridad</h1>
+<h2>Controles incluidos en la aplicación</h2>
+<ul>
+  <li>Claves almacenadas solo como hash seguro (werkzeug: scrypt/PBKDF2); cambio obligatorio de la clave inicial o restablecida.</li>
+  <li>Bloqueo temporal tras intentos fallidos; sesión con vencimiento; cookie <code>HttpOnly</code> y <code>SameSite</code>, segura con <code>POA_HTTPS=1</code>.</li>
+  <li>Protección CSRF en todas las operaciones de escritura y verificación de permisos por rol y unidad en el servidor.</li>
+  <li>Bitácora de auditoría con usuario, acción, detalle, fecha y dirección IP.</li>
+  <li>Los archivos temporales de cargas y descargas se eliminan al terminar cada operación.</li>
+</ul>
+<h2>Lista de verificación para TI</h2>
+<table class="libre">
+  <tr><th>✓</th><th>Control</th></tr>
+  <tr><td>☐</td><td>Publicación con HTTPS y certificado institucional (<code>POA_HTTPS=1</code>, <code>POA_PROXY</code>, <code>POA_HOST=127.0.0.1</code>).</td></tr>
+  <tr><td>☐</td><td>Puerto 8080 no accesible desde la red cuando hay proxy; acceso externo solo por VPN.</td></tr>
+  <tr><td>☐</td><td>Servicio ejecutado con cuenta sin privilegios; permisos de escritura solo en la carpeta de datos.</td></tr>
+  <tr><td>☐</td><td>Carpeta de datos y respaldos con acceso restringido a TI (contienen toda la formulación y los usuarios).</td></tr>
+  <tr><td>☐</td><td><code>credenciales_iniciales.txt</code> eliminado tras el primer ingreso.</td></tr>
+  <tr><td>☐</td><td>Respaldos diarios programados y probados (al menos una restauración de prueba).</td></tr>
+  <tr><td>☐</td><td>Antivirus con exclusión de escaneo en tiempo real para <code>*.sqlite3-wal</code> de la carpeta de datos (evita bloqueos).</td></tr>
+  <tr><td>☐</td><td>Sistema operativo y Python con actualizaciones de seguridad; revisión periódica de <code>pip list --outdated</code>.</td></tr>
+  <tr><td>☐</td><td>Monitoreo de <code>/salud</code> integrado a la herramienta de TI.</td></tr>
+</table>
+
+<h1 class="cap" id="c10"><span class="num">10</span>Monitoreo y registros</h1>
+<ul>
+  <li><b>Disponibilidad:</b> <code>GET /salud</code> responde <code>{"ok": true, "hora": "..."}</code> sin autenticación. Úselo en Zabbix, PRTG, Nagios o similar.</li>
+  <li><b>Registro del servicio:</b> la salida de Waitress (inicio, errores) va a <code>D:\DatosPOA\logs\servicio.log</code> (NSSM), a <code>journalctl -u sistema-poa</code> (systemd) o a <code>docker compose logs</code>.</li>
+  <li><b>Auditoría funcional:</b> la bitácora del sistema (Administración → Bitácora) registra ingresos, intentos fallidos, cambios, cargas y descargas.</li>
+  <li><b>Espacio en disco:</b> vigile el crecimiento de la carpeta de respaldos.</li>
+</ul>
+
+<h1 class="cap" id="c11"><span class="num">11</span>Administración de usuarios desde el servidor</h1>
+<p>Para emergencias (por ejemplo, el único administrador olvidó su clave), ejecute en el servidor, con las mismas variables del servicio:</p>
+<pre>cd C:\SistemaPOA\sistema_poa_dpdi
+set POA_DATA_DIR=D:\DatosPOA
+.venv\Scripts\python administrar_usuarios.py listar
+.venv\Scripts\python administrar_usuarios.py desbloquear ana.alva
+.venv\Scripts\python administrar_usuarios.py restablecer ana.alva       # muestra una clave temporal
+.venv\Scripts\python administrar_usuarios.py crear-admin soporte.dpdi   # crea o reactiva un administrador</pre>
+<pre># Linux
+sudo -u poa POA_DATA_DIR=/var/lib/poa /opt/sistema_poa/sistema_poa_dpdi/.venv/bin/python administrar_usuarios.py listar
+# Docker
+docker compose exec poa-web python administrar_usuarios.py restablecer admin</pre>
+<p>La clave temporal se muestra en pantalla y debe cambiarse en el primer ingreso. Las acciones de la consola no pasan por la bitácora
+  web: regístrelas en el sistema de tickets de TI.</p>
+
+<h1 class="cap" id="c12"><span class="num">12</span>Actualización de versiones</h1>
+<ol class="pasos">
+  <li>Coordine con la DPDI una ventana de mantenimiento y ejecute un respaldo (<code>respaldo_web.py</code>).</li>
+  <li>Detenga el servicio.</li>
+  <li>Reemplace el contenido de la carpeta del programa por la nueva versión <b>sin tocar la carpeta de datos</b> (por eso debe estar fuera del programa).
+    Conserve <code>.venv</code> o vuelva a crearlo.</li>
+  <li>Actualice dependencias: <code>.venv\Scripts\pip install -r requirements-web.txt</code> (Docker: <code>docker compose up -d --build</code>).</li>
+  <li>Inicie el servicio. Las <b>migraciones de la base son automáticas</b> al arrancar (agregan columnas o tablas nuevas sin borrar datos).</li>
+  <li>Verifique <code>/salud</code>, el ingreso y el tablero. Opcional: ejecute las pruebas automáticas con <code>python -m unittest discover -s tests</code>.</li>
+</ol>
+<p>Si algo falla: detenga el servicio, restaure la versión anterior del programa y el respaldo del paso 1.</p>
+<p>Para regenerar los manuales en PDF tras modificarlos: <code>node manuales/generar_pdf.js</code> (requiere Node.js y Playwright con Chromium).</p>
+
+<h1 class="cap" id="c13"><span class="num">13</span>Solución de problemas</h1>
+<table class="libre">
+  <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+  <tr><td>«python no se reconoce como un comando»</td><td>Python no está en el PATH.</td><td>Reinstale Python marcando «Add python.exe to PATH» o use <code>py -3.12</code>.</td></tr>
+  <tr><td>Error al instalar dependencias</td><td>Sin internet o proxy institucional.</td><td><code>pip install --proxy http://proxy:puerto -r requirements-web.txt</code>, o instale desde un equipo con salida e importe la carpeta <code>.venv</code>.</td></tr>
+  <tr><td>Funciona en la laptop pero no desde otros equipos</td><td>Firewall, perfil de red Público o aislamiento Wi-Fi.</td><td>Regla del 3.3; perfil de red «Dominio/Privado»; usar cable; probar por IP.</td></tr>
+  <tr><td>«OSError: [WinError 10048]» / «Address already in use»</td><td>Otro proceso usa el puerto 8080 (o el servidor ya está abierto).</td><td><code>netstat -ano | findstr :8080</code>; cierre el proceso o use <code>POA_PORT=8081</code>.</td></tr>
+  <tr><td>«database is locked»</td><td>Carpeta de datos en red, antivirus o copia manual del archivo en uso.</td><td>Use disco local, exclusión de antivirus y <code>respaldo_web.py</code> para copias.</td></tr>
+  <tr><td>Los usuarios pierden la sesión a cada rato</td><td>Cookie segura sin HTTPS, o <code>secret_key.txt</code> cambió.</td><td>Con <code>POA_HTTPS=1</code> acceda solo por https; no borre <code>secret_key.txt</code>.</td></tr>
+  <tr><td>La bitácora muestra la IP del proxy</td><td><code>POA_PROXY</code> no definido o IP distinta.</td><td>Defina <code>POA_PROXY</code> con la IP exacta desde la que el proxy se conecta.</td></tr>
+  <tr><td>Error 413 al cargar un Excel</td><td>Límite del proxy.</td><td>Nginx <code>client_max_body_size 25m</code>; IIS <code>maxAllowedContentLength</code>.</td></tr>
+  <tr><td>Error 502/504 en el proxy</td><td>Servicio detenido o exportación lenta.</td><td>Revise el servicio y el log; aumente <code>proxy_read_timeout</code>.</td></tr>
+  <tr><td>Docker: «PermissionError: /datos»</td><td>La carpeta <code>./datos</code> pertenece a root.</td><td><code>sudo chown -R 1000:1000 ./datos</code>.</td></tr>
+  <tr><td>Nadie puede ingresar como administrador</td><td>Clave olvidada o cuenta bloqueada.</td><td><code>administrar_usuarios.py crear-admin</code> o <code>restablecer</code> (capítulo 11).</td></tr>
+  <tr><td>El logo no aparece</td><td>No se cargó o formato no admitido.</td><td>La DPDI lo sube en Parámetros → Identidad gráfica (PNG, SVG, JPG, WEBP).</td></tr>
+</table>
+
+<h1 class="cap" id="c14"><span class="num">14</span>Anexos: estructura de archivos y comandos rápidos</h1>
+<h2>Estructura del programa</h2>
+<pre>sistema_poa_dpdi/
+├── servidor_web.py            arranque del servidor web (Waitress)
+├── iniciar_servidor_web.bat   instalación y arranque en Windows
+├── respaldo_web.py            respaldo en caliente con rotación
+├── administrar_usuarios.py    gestión de usuarios por consola
+├── requirements.txt / requirements-web.txt
+├── Dockerfile / docker-compose.yml
+├── controllers.py  exporter.py  database.py  catalogs_seed.py
+├── web/            app.py, schemas.py, templates/, static/
+├── manuales/       pdf/ (publicados en «Ayuda»), fuente/, img/
+├── tests/          pruebas automáticas
+└── main_app.py, build_exe.bat   versión de escritorio (no se usa en el servidor)</pre>
+<h2>Comandos rápidos</h2>
+<table class="libre">
+  <tr><th>Tarea</th><th>Windows (NSSM)</th><th>Linux (systemd)</th></tr>
+  <tr><td>Iniciar / detener</td><td><code>nssm start|stop SistemaPOA</code></td><td><code>systemctl start|stop sistema-poa</code></td></tr>
+  <tr><td>Estado</td><td><code>nssm status SistemaPOA</code></td><td><code>systemctl status sistema-poa</code></td></tr>
+  <tr><td>Registro</td><td><code>D:\DatosPOA\logs\servicio.log</code></td><td><code>journalctl -u sistema-poa -f</code></td></tr>
+  <tr><td>Salud</td><td colspan="2"><code>curl http://127.0.0.1:8080/salud</code></td></tr>
+  <tr><td>Respaldo manual</td><td colspan="2"><code>python respaldo_web.py --db RUTA\poa_dpdi_web.sqlite3 --destino RUTA_RESPALDOS</code></td></tr>
+</table>
+<p class="firma">Sistema POA - DPDI · Manual técnico de instalación y operación v1.0 · Para uso del área de Tecnologías de la Información</p>
+</body>
+</html>

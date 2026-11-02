@@ -22,7 +22,7 @@
 {% if usuario %}
 <header class="cabecera">
   <a class="marca" href="{{ url_for('inicio') }}">
-    {% if hay_logo %}<img src="{{ url_for('marca_logo') }}" alt="Logo institucional">{% else %}<span class="marca-texto">POA<span>·</span>DPDI</span>{% endif %}
+    {% if hay_logo %}<img src="{{ url_for('marca_logo') }}" alt="{{ institucion or 'Logo institucional' }}">{% else %}<span class="marca-texto">POA<span>·</span>DPDI</span>{% endif %}
     <span class="marca-sistema">Sistema de Formulación Presupuestal y Operativa POA<small>Proceso Gestión Estratégica GD-DO-01 · Insumo PP-PR-02</small></span>
   </a>
   <div class="usuario">
@@ -54,6 +54,7 @@
                   ('actividades-propias', '/actividades-propias', 'Actividades propias'), ('inversion', '/inversion', 'Inversión'),
                   ('resumen', '/resumen', 'Ficha resumen')] %}
   {% for key, href, label in items %}<a href="{{ href }}" class="{{ 'activo' if pagina == key }}">{{ label }}</a>{% endfor %}
+  <a href="/ayuda" class="{{ 'activo' if pagina == 'ayuda' }}">Ayuda</a>
   {% if usuario.rol in ('ADMIN', 'CONSULTA') %}<a href="/admin/tablero" class="{{ 'activo' if pagina == 'tablero' }}">Tablero DPDI</a>{% endif %}
   {% if es_admin %}
   <details class="submenu {{ 'activo' if pagina in ('parametros','unidades','cuentas','catalogos','costos','plantilla','usuarios','bitacora') }}">
@@ -72,7 +73,7 @@
   {% endif %}
 </nav>
 {% endif %}
-<main class="contenido">
+<main class="contenido {% block clase_main %}{% endblock %}">
   {% with mensajes = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in mensajes %}<div class="alerta alerta-{{ cat }}">{{ msg }}</div>{% endfor %}
   {% endwith %}
@@ -85,7 +86,7 @@
 </main>
 <div id="toasts"></div>
 <div id="modal" class="modal" hidden><div class="modal-caja"><div class="modal-cab"><h3 id="modal-titulo"></h3><button class="cerrar" data-cerrar>×</button></div><div id="modal-cuerpo"></div></div></div>
-<footer class="pie">Dirección de Planificación y Desarrollo Institucional (DPDI) · Sistema POA {{ anio or '' }}</footer>
+<footer class="pie">{{ institucion }} · Dirección de Planificación y Desarrollo Institucional (DPDI) · Sistema POA {{ anio or '' }}</footer>
 <script>window.POA_CTX = {{ {'unidades': unidades, 'editable': editable, 'rol': usuario.rol if usuario else None,
   'uid': unidad.id if unidad else None}|tojson }};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>

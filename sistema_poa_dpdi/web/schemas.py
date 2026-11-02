@@ -344,8 +344,8 @@ def admin_entities() -> dict:
 
 
 PARAM_FIELDS_EXTRA = [
-    {"key": "tema_primario", "label": "Color primario (cabecera)", "type": "color"},
-    {"key": "tema_secundario", "label": "Color secundario (barra de menú)", "type": "color"},
-    {"key": "tema_acento", "label": "Color de acento (botones principales)", "type": "color"},
-    {"key": "tema_fuente", "label": "Tipografía (nombre de Google Fonts, opcional)", "type": "text"},
+    {"key": "tema_primario", "label": "Color de marca (logo, menú activo, acentos) — portal: #FF6600", "type": "color"},
+    {"key": "tema_secundario", "label": "Color de títulos y encabezados — portal: #333333", "type": "color"},
+    {"key": "tema_acento", "label": "Color de botones principales — portal: #FF6600", "type": "color"},
+    {"key": "tema_fuente", "label": "Tipografía (nombre de Google Fonts, opcional; requiere internet)", "type": "text"},
 ]

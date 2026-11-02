@@ -163,6 +163,36 @@ class WebTest(unittest.TestCase):
                        data={"archivo": (io.BytesIO(plantilla), "plantilla.xlsx")}, content_type="multipart/form-data")
         self.assertEqual(rep["avisos"], [])
 
+    def test_ayuda_y_manuales_por_rol(self):
+        from web.app import BASE, MANUALES
+        html = self.admin.get("/ayuda").get_data(as_text=True)
+        for m in MANUALES:
+            self.assertIn(m["titulo"], html)
+            if (BASE / "manuales" / "pdf" / m["archivo"]).exists():
+                r = self.admin.get(f"/ayuda/{m['archivo']}")
+                self.assertTrue(r.data.startswith(b"%PDF"), m["archivo"])
+                r.close()
+        self.assertEqual(self.admin.get("/ayuda/../web/app.py").status_code, 404)
+        unidades = self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]
+        resp = self.crear_responsable("luis.rios", unidades[0]["id"])
+        html = resp.get("/ayuda").get_data(as_text=True)
+        self.assertIn("Manual del usuario", html)
+        self.assertNotIn("Manual técnico", html)
+        self.assertEqual(resp.get("/ayuda/Manual_Tecnologia_POA_DPDI.pdf").status_code, 404)
+
+    def test_restablecer_clave_desbloquea(self):
+        unidades = self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]
+        self.crear_responsable("rosa.paz", unidades[0]["id"])
+        c = self.app.test_client()
+        for _ in range(5):
+            c.post("/login", data={"usuario": "rosa.paz", "clave": "mala", "csrf_token": self.token(c, "/login")})
+        usuarios = self.api(self.admin, "GET", "/api/admin/t/usuarios")["rows"]
+        rosa = next(u for u in usuarios if u["usuario"] == "rosa.paz")
+        self.api(self.admin, "PUT", f"/api/admin/t/usuarios/{rosa['id']}",
+                 {"usuario": "rosa.paz", "rol": "RESPONSABLE", "activo": 1, "debe_cambiar_clave": 0,
+                  "nueva_clave": "Nueva2027b", "unidades": [str(unidades[0]["id"])]})
+        self.cliente("rosa.paz", "Nueva2027b")
+
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
         self.assertIn("--primario: #123456", self.admin.get("/").get_data(as_text=True))

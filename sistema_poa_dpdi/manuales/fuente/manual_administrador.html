@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual del administrador DPDI - Sistema POA DPDI</title>
+<link rel="stylesheet" href="estilo.css">
+<style>@page { @top-left { content: "Sistema POA - DPDI · Manual del administrador DPDI"; } @bottom-left { content: "DPDI · {{FECHA}}"; } }</style>
+</head>
+<body>
+
+<section class="portada">
+  <div class="franja">
+    <div class="institucion">Universidad Autónoma del Perú · Dirección de Planeamiento y Desarrollo Institucional</div>
+    <h1>Manual del administrador DPDI</h1>
+    <div class="sub">Sistema de Formulación Presupuestal y Operativa POA - DPDI · versión web</div>
+  </div>
+  <div class="cuerpo">
+    <span class="publico">Dirigido a: administradores y analistas de la DPDI</span>
+    <div class="datos">
+      <p><b>Propósito:</b> describir la preparación del proceso de formulación (parámetros, catálogos, unidades, techos y usuarios),
+        el seguimiento y la revisión de las fichas, la consolidación institucional y las tareas de control (bitácora y respaldos).</p>
+      <p><b>Versión del documento:</b> 1.0 · {{FECHA}}</p>
+      <p><b>Complementa:</b> Manual del usuario (registro de la ficha) y Manual técnico de Tecnologías de la Información (instalación y operación).</p>
+    </div>
+  </div>
+  <div class="pie">Documento de uso interno. Las imágenes son referenciales y fueron tomadas con datos de prueba.</div>
+</section>
+
+<section class="indice">
+  <h1 class="cap">Contenido</h1>
+  <ol>
+    <li><a href="#c1">Responsabilidades del administrador</a></li>
+    <li><a href="#c2">Calendario sugerido del proceso</a></li>
+    <li><a href="#c3">Primer ingreso y menú de administración</a></li>
+    <li><a href="#c4">Parámetros generales e identidad gráfica</a></li>
+    <li><a href="#c5">Plantilla de Parámetros y Catálogos (actualización masiva)</a></li>
+    <li><a href="#c6">Unidades orgánicas y techos</a></li>
+    <li><a href="#c7">Cuentas NIIF + Partidas GG</a></li>
+    <li><a href="#c8">Catálogos estratégicos (Eje → Objetivo anual → OE)</a></li>
+    <li><a href="#c9">Costos de referencia y plantilla de funcionamiento</a></li>
+    <li><a href="#c10">Usuarios y accesos</a></li>
+    <li><a href="#c11">Tablero DPDI y revisión de fichas</a></li>
+    <li><a href="#c12">Consolidación y reportes</a></li>
+    <li><a href="#c13">Bitácora y respaldos</a></li>
+    <li><a href="#c14">Cierre del proceso y buenas prácticas</a></li>
+  </ol>
+</section>
+
+<h1 class="cap" id="c1"><span class="num">1</span>Responsabilidades del administrador</h1>
+<p>El rol <b>Administrador DPDI</b> tiene acceso total: puede ver y modificar la ficha de cualquier unidad en cualquier estado,
+  mantener todos los catálogos y gestionar los usuarios. Por ello se recomienda asignarlo solo a dos o tres personas de la DPDI
+  y usar el rol <b>Consulta DPDI</b> para quienes solo necesitan ver el avance.</p>
+<table class="libre">
+  <tr><th>Tema</th><th>Responsabilidad</th></tr>
+  <tr><td>Preparación</td><td>Publicar parámetros del año, catálogos estratégicos, cuentas NIIF / partidas, unidades, techos y plantilla de funcionamiento.</td></tr>
+  <tr><td>Accesos</td><td>Crear usuarios, asignar unidades, restablecer claves y desactivar cuentas que ya no se usan.</td></tr>
+  <tr><td>Seguimiento</td><td>Monitorear el avance en el Tablero DPDI y apoyar a las unidades con directrices pendientes.</td></tr>
+  <tr><td>Revisión</td><td>Aprobar u observar las fichas enviadas; reabrir fichas cuando corresponda.</td></tr>
+  <tr><td>Consolidación</td><td>Descargar la BD NIIF consolidada y los libros oficiales por unidad.</td></tr>
+  <tr><td>Control</td><td>Revisar la bitácora y descargar respaldos en los hitos del proceso.</td></tr>
+</table>
+<div class="nota"><b>Separación de funciones</b>La instalación, el servidor, los respaldos automáticos y la seguridad de red están a cargo
+  del área de Tecnologías de la Información (ver Manual técnico). La DPDI administra la información y los accesos funcionales.</div>
+
+<h1 class="cap" id="c2"><span class="num">2</span>Calendario sugerido del proceso</h1>
+<table class="libre">
+  <tr><th>Etapa</th><th>Actividades en el sistema</th></tr>
+  <tr><td>1. Preparación</td><td>Actualizar parámetros (año, tipo de cambio, reajuste, morosidad, fecha límite), catálogos, cuentas, unidades y techos. Lo más rápido es llenar la plantilla de Parámetros y Catálogos en Excel e importarla.</td></tr>
+  <tr><td>2. Accesos</td><td>Crear los usuarios responsables con clave temporal y asignarles sus unidades. Comunicar la dirección del sistema y el Manual del usuario.</td></tr>
+  <tr><td>3. Formulación</td><td>Las unidades registran su ficha. La DPDI monitorea el tablero y responde consultas.</td></tr>
+  <tr><td>4. Revisión</td><td>Revisar las fichas enviadas: aprobar u observar con un comentario claro.</td></tr>
+  <tr><td>5. Consolidación</td><td>Con todas las fichas aprobadas, descargar la BD consolidada y un respaldo completo.</td></tr>
+  <tr><td>6. Cierre</td><td>Desactivar o pasar a solo lectura a los usuarios que no seguirán trabajando; archivar los respaldos.</td></tr>
+</table>
+
+<h1 class="cap" id="c3"><span class="num">3</span>Primer ingreso y menú de administración</h1>
+<p>Tecnología entregará la clave inicial del usuario <code>admin</code>. Al ingresar por primera vez el sistema le exigirá cambiarla.
+  Luego, cree un usuario <b>personal</b> con rol Administrador DPDI para cada administrador y use <code>admin</code> solo como cuenta
+  de contingencia: así la bitácora identifica a cada persona.</p>
+<p>El administrador ve, además del menú normal, el <b>Tablero DPDI</b> y el desplegable <b>Administración</b>:</p>
+<figure><img src="../img/a10_menu_admin.png"><figcaption><b>Figura 1.</b> Menú de administración.</figcaption></figure>
+<p>Todos los mantenedores siguen el mismo patrón: tabla con buscador, formulario a la derecha y botones <b>Nuevo</b>, <b>Guardar</b> y
+  <b>Eliminar</b>. Haga clic en una fila para editarla.</p>
+<h2>Trabajar sobre la ficha de una unidad</h2>
+<p>El administrador puede seleccionar cualquier unidad en la barra crema (clic en el nombre de la unidad) y entrar a sus páginas
+  de registro, incluso si la ficha está Enviada o Aprobada. Úselo para correcciones puntuales y deje constancia en la observación
+  o en el expediente: todos los cambios quedan en la bitácora con su usuario.</p>
+
+<h1 class="cap" id="c4"><span class="num">4</span>Parámetros generales e identidad gráfica</h1>
+<p>Menú <b>Administración → Parámetros e identidad gráfica</b>.</p>
+<figure><img src="../img/a02_parametros.png"><figcaption><b>Figura 2.</b> Parámetros, actualización masiva e identidad gráfica.</figcaption></figure>
+<h2>Datos generales y supuestos</h2>
+<table class="libre">
+  <tr><th>Parámetro</th><th>Uso en el sistema</th></tr>
+  <tr><td>Institución, código, versión y fecha del formato</td><td>Encabezados del libro Excel y del PDF de la Ficha resumen.</td></tr>
+  <tr><td>Año de formulación</td><td>Año de todas las fichas. Cambiarlo inicia un nuevo ejercicio (los datos de años anteriores se conservan).</td></tr>
+  <tr><td>Fecha límite de presentación</td><td>Se muestra en la pantalla de acceso como «cierre».</td></tr>
+  <tr><td>Tipo de cambio</td><td>Convierte a soles los montos registrados en US$.</td></tr>
+  <tr><td>Reajuste remunerativo (%) y mes de inicio</td><td>Se aplica a las filas de Funcionamiento – egresos con «Aplica reajuste = Sí».</td></tr>
+  <tr><td>Tasa de morosidad (%)</td><td>Se descuenta de los ingresos de funcionamiento con «Aplica morosidad = Sí».</td></tr>
+  <tr><td>Inflación, UIT, RMV, estudiantes, pensiones, cuotas</td><td>Supuestos de referencia y bases de cálculo de la plantilla de funcionamiento.</td></tr>
+  <tr><td>Director(a) y cargo DPDI</td><td>Firma «Revisado por» del PDF.</td></tr>
+</table>
+<p>Pulse <b>Guardar parámetros</b>. Los cálculos de todas las fichas se actualizan al instante.</p>
+<h2>Identidad gráfica</h2>
+<p>Los colores vienen configurados con la paleta del portal institucional: naranja <code>#FF6600</code> para marca y botones y gris
+  <code>#333333</code> para títulos. Puede ajustarlos con el selector de color, indicar una tipografía de Google Fonts (opcional,
+  requiere internet en los equipos de los usuarios) y <b>subir el logo oficial</b> (PNG, SVG, JPG o WEBP) con «Subir logo».</p>
+<div class="alerta"><b>Logo oficial</b>Suba el logo oficial proporcionado por el área de Imagen Institucional antes de abrir el sistema a las unidades.
+  El logo que aparece en las capturas de este manual es solo referencial.</div>
+
+<h1 class="cap" id="c5"><span class="num">5</span>Plantilla de Parámetros y Catálogos (actualización masiva)</h1>
+<p>En la tarjeta <b>Actualización masiva</b> de la misma página:</p>
+<ol class="pasos">
+  <li><b>Descargar plantilla de Parámetros y Catálogos (.xlsx)</b>: obtiene un libro con los datos actuales y una hoja por tema:
+    <code>Datos_Generales</code>, <code>Unidades_Techos</code>, <code>Cuentas_NIIF_Partidas_GG</code>, <code>Catalogos_Estrategicos</code>,
+    <code>Costos_Referencia</code> y <code>Plantilla_Funcionamiento</code>.</li>
+  <li>Modifique el libro en Excel respetando los encabezados. Para filas nuevas deje vacía la columna <b>ID</b>; para modificar una fila
+    existente conserve su ID. Las unidades se identifican por su <b>código de área</b>: si el código ya existe, se actualizan sus datos y techos.</li>
+  <li><b>Importar plantilla</b>: seleccione el archivo y pulse el botón. El sistema muestra cuántas filas actualizó por hoja y los avisos
+    (por ejemplo, valores no válidos), sin detener la carga del resto.</li>
+</ol>
+<p>Otras opciones de la tarjeta:</p>
+<ul>
+  <li><b>Importar parámetros desde una Ficha Excel:</b> toma los datos generales y techos de una ficha oficial llenada (hoja Parámetros).</li>
+  <li><b>BD NIIF consolidada de todas las unidades</b> y <b>Respaldo completo de la base de datos</b> (ver capítulos 12 y 13).</li>
+</ul>
+<div class="tip"><b>Recomendación</b>Antes de una importación masiva descargue un <b>respaldo completo</b>. Si algo sale mal, Tecnología puede restaurarlo.</div>
+
+<h1 class="cap" id="c6"><span class="num">6</span>Unidades orgánicas y techos</h1>
+<p>Menú <b>Administración → Unidades y techos</b>. Tiene la misma estructura que la hoja <code>Unidades_Techos</code> de la plantilla.</p>
+<figure><img src="../img/a03_unidades.png"><figcaption><b>Figura 3.</b> Mantenedor de unidades orgánicas y techos.</figcaption></figure>
+<table class="libre">
+  <tr><th>Campo</th><th>Descripción</th></tr>
+  <tr><td>Código de área</td><td>Identificador único de la unidad (por ejemplo 101109). Es el prefijo de los códigos en la base consolidada.</td></tr>
+  <tr><td>Centro de costo</td><td>Nombre del centro de costo (por ejemplo CENTRO DE INNOVACIÓN).</td></tr>
+  <tr><td>Nombre de la unidad orgánica</td><td>Unidad orgánica o sede (por ejemplo Lima Sur). La unidad se muestra como <b>código - centro de costo - unidad orgánica</b>.</td></tr>
+  <tr><td>Macrogrupo</td><td>Agrupación usada en reportes y en la plantilla de funcionamiento.</td></tr>
+  <tr><td>Responsable, cargo, correo</td><td>Datos que aparecen en la Ficha resumen.</td></tr>
+  <tr><td>¿Genera ingresos?</td><td>Habilita las filas de ingresos de la plantilla de funcionamiento marcadas como «solo unidades que generan ingresos».</td></tr>
+  <tr><td>Techos (S/)</td><td>Iniciativas, funcionamiento, otras operativas, inversión, planilla docente, planilla administrativa y marketing.</td></tr>
+  <tr><td>Metas (S/)</td><td>Meta de ingresos de funcionamiento, de otras operativas y de resultado de actividades propias.</td></tr>
+</table>
+<div class="nota"><b>Carga de una ficha Excel</b>Cuando se importa una ficha oficial marcando «Actualizar también parámetros y catálogos», el sistema
+  actualiza los techos y datos de la unidad con los valores de la hoja Parámetros del archivo.</div>
+
+<h1 class="cap" id="c7"><span class="num">7</span>Cuentas NIIF + Partidas GG</h1>
+<p>Base única de partidas: cada registro relaciona la <b>Partida (GG)</b> que el usuario elige en el detalle con su <b>descripción
+  orientativa</b>, la <b>cuenta contable NIIF</b>, la <b>categoría presupuestal</b>, la naturaleza y el resultado por función. Al elegir una
+  partida en una ficha, el sistema asigna automáticamente estos datos para la base consolidada.</p>
+<figure><img src="../img/a04_cuentas.png"><figcaption><b>Figura 4.</b> Cuentas NIIF + Partidas GG con buscador.</figcaption></figure>
+<ul>
+  <li>Para retirar una partida que ya no debe usarse, desmarque <b>Activo</b> en vez de eliminarla: las fichas que la usan conservan su clasificación.</li>
+  <li>Cuide que el nombre de la Partida (GG) no se repita dentro del mismo tipo (Egresos / Ingresos / Inversión).</li>
+  <li>La descripción orientativa es la ayuda que ve el usuario al buscar la partida; redáctela en lenguaje simple.</li>
+</ul>
+
+<h1 class="cap" id="c8"><span class="num">8</span>Catálogos estratégicos (Eje → Objetivo anual → OE)</h1>
+<p>Use el filtro superior para elegir el catálogo: ejes estratégicos, objetivos estratégicos del PEI (OE), objetivos anuales del POA,
+  categorías, tipos de inversión, sustentos, etc.</p>
+<figure><img src="../img/a05_catalogos.png"><figcaption><b>Figura 5.</b> Objetivos anuales del POA con su eje y OE.</figcaption></figure>
+<p>Para cada <b>objetivo anual del POA</b> registre su <b>Eje estratégico</b> y su <b>OE del PEI</b>. Esta relación es la que permite que,
+  en Iniciativas, la lista de objetivos se filtre por eje y que el OE se complete automáticamente. Un objetivo sin eje no aparecerá
+  al usuario; un objetivo sin OE dejará la iniciativa con la directriz DF-01 pendiente.</p>
+
+<h1 class="cap" id="c9"><span class="num">9</span>Costos de referencia y plantilla de funcionamiento</h1>
+<h2>Costos de referencia</h2>
+<p>Lista de costos unitarios de referencia (concepto, unidad de medida, costo en soles y fuente o vigencia) que las unidades consultan para
+  estimar sus requerimientos.</p>
+<h2>Plantilla de «Correr Actividades de Funcionamiento»</h2>
+<p>Define las filas que se insertan cuando una unidad pulsa <b>Correr Actividades de Funcionamiento</b> en Inicio.</p>
+<figure><img src="../img/a06_plantilla.png"><figcaption><b>Figura 6.</b> Plantilla de funcionamiento.</figcaption></figure>
+<table class="libre">
+  <tr><th>Campo</th><th>Descripción</th></tr>
+  <tr><td>Ámbito</td><td><code>GLOBAL</code> para todas las unidades o el código de área de una unidad específica.</td></tr>
+  <tr><td>Macrogrupo</td><td><code>*</code> para todos o el macrogrupo al que aplica.</td></tr>
+  <tr><td>Solo unidades que generan ingresos</td><td>Limita la fila a unidades con «¿Genera ingresos? = Sí».</td></tr>
+  <tr><td>Tipo y cuenta NIIF</td><td>Egresos o Ingresos y la cuenta a la que se registra.</td></tr>
+  <tr><td>Base de cálculo, porcentaje, monto fijo</td><td>Monto = base × porcentaje (1 = 100 %), o el monto fijo anual. Se prorratea 1/12 de enero a diciembre.</td></tr>
+  <tr><td>Aplica reajuste / morosidad</td><td>Aplica el reajuste (egresos) o la morosidad (ingresos) de los parámetros.</td></tr>
+</table>
+
+<h1 class="cap" id="c10"><span class="num">10</span>Usuarios y accesos</h1>
+<figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 7.</b> Usuarios y accesos.</figcaption></figure>
+<h2>Crear un usuario</h2>
+<ol class="pasos">
+  <li>Pulse <b>Nuevo</b> y escriba el <b>usuario</b> (se recomienda el usuario de correo institucional, por ejemplo <code>ana.alva</code>), nombre completo y correo.</li>
+  <li>Elija el <b>rol</b>: Responsable de unidad orgánica, Consulta DPDI (solo lectura) o Administrador DPDI.</li>
+  <li>Para responsables, marque las <b>unidades asignadas</b> (puede asignar varias; el buscador ayuda a encontrarlas).</li>
+  <li>Escriba una <b>clave temporal</b> (mínimo 8 caracteres, con letras y números) y deje marcado <b>Debe cambiar la clave al ingresar</b>.</li>
+  <li>Pulse <b>Guardar</b> y comunique el usuario y la clave temporal por un canal seguro (no en el mismo correo que la dirección del sistema, si es posible).</li>
+</ol>
+<h2>Tareas frecuentes</h2>
+<table class="libre">
+  <tr><th>Tarea</th><th>Cómo hacerlo</th></tr>
+  <tr><td>Restablecer una clave olvidada</td><td>Seleccione el usuario, escriba una nueva clave temporal, marque «Debe cambiar la clave» y guarde. Esto también desbloquea la cuenta.</td></tr>
+  <tr><td>Desbloquear tras intentos fallidos</td><td>Restablezca la clave o espere 15 minutos.</td></tr>
+  <tr><td>Retirar el acceso</td><td>Desmarque <b>Activo</b>. No elimine usuarios con historial: la bitácora los referencia.</td></tr>
+  <tr><td>Cambiar las unidades de un responsable</td><td>Modifique «Unidades asignadas» y guarde. El cambio rige desde su siguiente acción.</td></tr>
+  <tr><td>Ver último acceso</td><td>Columna «Último acceso» de la tabla.</td></tr>
+</table>
+<div class="alerta"><b>Si el único administrador pierde su clave</b>Tecnología puede crear o restablecer un administrador desde el servidor con la herramienta
+  <code>administrar_usuarios.py</code> (ver Manual técnico).</div>
+
+<h1 class="cap" id="c11"><span class="num">11</span>Tablero DPDI y revisión de fichas</h1>
+<p>El <b>Tablero DPDI</b> resume, por unidad, el estado de la ficha, los montos registrados frente a los techos, las directrices pendientes
+  y la fecha del último cambio. Use el buscador para filtrar y haga clic en una unidad para abrirla.</p>
+<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 8.</b> Tablero DPDI.</figcaption></figure>
+<h2>Revisar una ficha enviada</h2>
+<ol class="pasos">
+  <li>Seleccione la unidad (desde el tablero o la barra de unidad).</li>
+  <li>Revise la <b>Ficha resumen</b> y el semáforo de directrices; descargue el libro Excel o el PDF si necesita revisar fuera de línea.</li>
+  <li>En <b>Inicio → Estado de la ficha</b> elija la acción:</li>
+</ol>
+<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 9.</b> Acciones de revisión del administrador.</figcaption></figure>
+<table class="libre">
+  <tr><th>Acción</th><th>Desde</th><th>Resultado</th></tr>
+  <tr><td>Aprobar</td><td>Enviada</td><td>La ficha queda <span class="chip aprobada">Aprobada</span> y en solo lectura para la unidad.</td></tr>
+  <tr><td>Observar</td><td>Enviada o Aprobada</td><td>Exige escribir la observación. La ficha pasa a <span class="chip observada">Observada</span> y la unidad puede corregir y reenviar.</td></tr>
+  <tr><td>Reabrir (borrador)</td><td>Enviada, Aprobada u Observada</td><td>Devuelve la ficha a <span class="chip borrador">Borrador</span> y borra la observación.</td></tr>
+</table>
+<div class="tip"><b>Observaciones útiles</b>Escriba observaciones concretas: hoja, código y qué corregir (por ejemplo «INI-03: falta sustento de la partida Pasajes»).</div>
+
+<h1 class="cap" id="c12"><span class="num">12</span>Consolidación y reportes</h1>
+<table class="libre">
+  <tr><th>Reporte</th><th>Dónde</th><th>Contenido</th></tr>
+  <tr><td>Libro oficial + BD NIIF</td><td>Barra de la unidad</td><td>Ficha de Formulación de la unidad seleccionada en el formato oficial (16 hojas) más la hoja BD_CONSOLIDADA_NIIF.</td></tr>
+  <tr><td>Ficha resumen (PDF)</td><td>Barra de la unidad</td><td>12 secciones y espacios de firma.</td></tr>
+  <tr><td>BD NIIF consolidada de todas las unidades</td><td>Parámetros → Actualización masiva</td><td>Una fila por concepto y mes de todas las unidades, con cuenta NIIF, categoría y partida, lista para tablas dinámicas o Power BI.</td></tr>
+  <tr><td>Respaldo completo</td><td>Parámetros → Actualización masiva</td><td>Copia de la base de datos (archivo .sqlite3) para archivo o restauración por Tecnología.</td></tr>
+</table>
+
+<h1 class="cap" id="c13"><span class="num">13</span>Bitácora y respaldos</h1>
+<p>La <b>Bitácora</b> registra quién hizo qué y cuándo: ingresos, intentos fallidos, altas y cambios de registros, importaciones,
+  descargas, cambios de estado y cambios de parámetros, con la dirección IP del equipo. Puede filtrarla por texto (usuario, unidad, acción).</p>
+<figure><img src="../img/a08_bitacora.png"><figcaption><b>Figura 10.</b> Bitácora de auditoría.</figcaption></figure>
+<p>Tecnología programa respaldos automáticos diarios. Además, se recomienda que la DPDI descargue un <b>respaldo completo</b>:</p>
+<ul>
+  <li>antes de cada importación masiva de la plantilla o de fichas Excel;</li>
+  <li>al cierre de la etapa de formulación y al aprobar la última ficha;</li>
+  <li>antes de cambiar el año de formulación.</li>
+</ul>
+<div class="alerta"><b>Confidencialidad</b>El respaldo contiene toda la información del sistema, incluidos los usuarios (las claves están cifradas).
+  Guárdelo en una carpeta institucional con acceso restringido.</div>
+
+<h1 class="cap" id="c14"><span class="num">14</span>Cierre del proceso y buenas prácticas</h1>
+<ul>
+  <li>Use cuentas personales para cada administrador; no comparta la cuenta <code>admin</code>.</li>
+  <li>Revise mensualmente la lista de usuarios y desactive a quienes ya no participan.</li>
+  <li>Mantenga los catálogos actualizados antes de abrir el proceso: cambiarlos a mitad de la formulación puede alterar directrices ya revisadas.</li>
+  <li>Prefiera desactivar (Activo = No) en lugar de eliminar partidas, catálogos o usuarios con historial.</li>
+  <li>Al cerrar el proceso descargue la BD consolidada y un respaldo completo, y solicite a Tecnología conservar una copia fuera del servidor.</li>
+  <li>Para un nuevo ejercicio, actualice el <b>año de formulación</b> y la plantilla de parámetros; las fichas de años anteriores se conservan.</li>
+</ul>
+<p class="firma">Dirección de Planeamiento y Desarrollo Institucional · Sistema POA - DPDI · Manual del administrador v1.0</p>
+</body>
+</html>

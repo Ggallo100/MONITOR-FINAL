@@ -128,7 +128,7 @@
     select(id, fire = false) {
       this.sel = id; this.render();
       const r = this.rows.find((x) => String(x.id) === String(id));
-      if (fire && this.onSelect) this.onSelect(r);
+      if (fire && r && this.onSelect) this.onSelect(r);
       return r;
     }
     get(id) { return this.rows.find((x) => String(x.id) === String(id)); }
@@ -436,11 +436,13 @@
     await POA.listas();
     let kind = "FE", rid = null, editable = CTX.editable, siguiente = "", form, grid;
     const calc = debounce(async (v) => form.setCalc(await POA.api("POST", "/api/calc/" + kind, v, { silencioso: true })));
+    const renovar = (sel) => { const viejo = $(sel); const nuevo = viejo.cloneNode(false); viejo.replaceWith(nuevo); return nuevo; };
     function montar() {
       const C = FLAT[kind];
       $("#f-titulo").textContent = C.titulo;
-      form = new Form($("#f-form"), C.fields, { kind, onChange: (v) => calc(v) });
-      $("#f-tabla").innerHTML = "";
+      // contenedores nuevos: los eventos de la pestaña anterior no deben seguir activos
+      form = new Form(renovar("#f-form"), C.fields, { kind, onChange: (v) => calc(v) });
+      renovar("#f-tabla");
       const nuevo = $("#f-buscar").cloneNode(true); $("#f-buscar").replaceWith(nuevo); nuevo.value = "";
       grid = new Grid($("#f-tabla"), C.columns, {
         buscador: nuevo, onSelect: (r) => { rid = r.id; form.set(r); calc(form.get()); $("#f-modo").textContent = "Editando " + r.codigo; },

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual del usuario - Sistema POA DPDI</title>
+<link rel="stylesheet" href="estilo.css">
+<style>@page { @top-left { content: "Sistema POA - DPDI · Manual del usuario"; } @bottom-left { content: "DPDI · {{FECHA}}"; } }</style>
+</head>
+<body>
+
+<section class="portada">
+  <div class="franja">
+    <div class="institucion">Universidad Autónoma del Perú · Dirección de Planeamiento y Desarrollo Institucional</div>
+    <h1>Manual del usuario</h1>
+    <div class="sub">Sistema de Formulación Presupuestal y Operativa POA - DPDI · versión web</div>
+  </div>
+  <div class="cuerpo">
+    <span class="publico">Dirigido a: responsables de formulación de las unidades orgánicas</span>
+    <div class="datos">
+      <p><b>Propósito:</b> guiar paso a paso el registro de la Ficha de Formulación POA de su unidad: iniciativas, funcionamiento,
+        otras actividades operativas, actividades propias, inversión y revisión de la Ficha resumen antes de enviarla a la DPDI.</p>
+      <p><b>Versión del documento:</b> 1.0 · {{FECHA}}</p>
+      <p><b>Soporte funcional:</b> Dirección de Planeamiento y Desarrollo Institucional (DPDI)<br>
+         <b>Soporte de acceso (claves, conexión):</b> Mesa de ayuda de Tecnologías de la Información</p>
+    </div>
+  </div>
+  <div class="pie">Documento de uso interno. Las imágenes son referenciales y fueron tomadas con datos de prueba; los montos y nombres no corresponden a la formulación oficial.</div>
+</section>
+
+<section class="indice">
+  <h1 class="cap">Contenido</h1>
+  <ol>
+    <li><a href="#c1">Antes de empezar</a></li>
+    <li><a href="#c2">Ingreso al sistema y cambio de clave</a></li>
+    <li><a href="#c3">La pantalla principal</a></li>
+    <li><a href="#c4">Inicio: estado, datos de la unidad y funcionamiento base</a></li>
+    <li><a href="#c5">Iniciativas</a></li>
+    <li><a href="#c6">Funcionamiento: ingresos y egresos</a></li>
+    <li><a href="#c7">Otras actividades operativas</a></li>
+    <li><a href="#c8">Actividades propias</a></li>
+    <li><a href="#c9">Inversión</a></li>
+    <li><a href="#c10">Ficha resumen y las 11 directrices DPDI</a></li>
+    <li><a href="#c11">Envío a revisión y estados de la ficha</a></li>
+    <li><a href="#c12">Descargas e importación desde Excel</a></li>
+    <li><a href="#c13">Preguntas frecuentes y solución de problemas</a></li>
+    <li><a href="#c14">Glosario</a></li>
+  </ol>
+</section>
+
+<h1 class="cap" id="c1"><span class="num">1</span>Antes de empezar</h1>
+<p>El Sistema POA - DPDI reemplaza el llenado manual del archivo <code>Ficha_Formulacion_POA.xlsx</code>. Cada responsable trabaja
+  en línea, desde su navegador, sobre la ficha de su unidad orgánica; la DPDI revisa, observa o aprueba las fichas y obtiene la
+  base consolidada de toda la universidad sin volver a digitar información.</p>
+<h2>Qué necesita</h2>
+<ul>
+  <li>Una computadora conectada a la red de la universidad (o a la VPN institucional, si Tecnología la habilita).</li>
+  <li>Un navegador actualizado: Google Chrome, Microsoft Edge o Mozilla Firefox. No se requiere instalar ningún programa.</li>
+  <li>La <b>dirección del sistema</b> que le comunicará la DPDI, por ejemplo <code>http://NOMBRE-DEL-EQUIPO:8080</code> durante la
+    etapa temporal o <code>https://poa.universidad.edu.pe</code> cuando el sistema esté en el servidor institucional.</li>
+  <li>Su <b>usuario</b> y <b>clave temporal</b>, entregados por la DPDI. Cada usuario es personal: no comparta su clave.</li>
+</ul>
+<h2>Roles del sistema</h2>
+<table>
+  <tr><th>Rol</th><th>Qué puede hacer</th></tr>
+  <tr><td>Responsable de unidad</td><td>Registra y modifica la ficha de las unidades que tiene asignadas mientras estén en estado Borrador u Observada, revisa directrices, descarga el libro Excel y el PDF y envía la ficha a revisión.</td></tr>
+  <tr><td>Consulta</td><td>Ve todas las unidades y el tablero DPDI en modo de solo lectura y puede descargar reportes.</td></tr>
+  <tr><td>Administrador DPDI</td><td>Gestiona parámetros, catálogos, unidades, techos, usuarios; revisa, observa, aprueba o reabre fichas.</td></tr>
+</table>
+<div class="nota"><b>Guardado automático en el servidor</b>Cada vez que pulsa «Guardar», la información queda registrada en la base central.
+  No es necesario «grabar el archivo» al terminar, y puede continuar el trabajo otro día o desde otra computadora.</div>
+
+<h1 class="cap" id="c2"><span class="num">2</span>Ingreso al sistema y cambio de clave</h1>
+<ol class="pasos">
+  <li>Abra el navegador y escriba la dirección del sistema en la barra de direcciones.</li>
+  <li>En la pantalla de acceso escriba su <b>usuario</b> y su <b>clave</b> y pulse <b>Ingresar</b>. La franja inferior muestra la fecha
+    de cierre de la formulación.</li>
+  <li>La primera vez (o si la DPDI restableció su clave) el sistema le pedirá <b>cambiar la clave</b>: escriba la clave actual,
+    la nueva y repítala. La nueva clave debe tener <b>al menos 8 caracteres, con letras y números</b>.</li>
+</ol>
+<figure><img src="../img/u01_login.png"><figcaption><b>Figura 1.</b> Pantalla de acceso.</figcaption></figure>
+<figure class="media"><img src="../img/u02_cambiar_clave.png"><figcaption><b>Figura 2.</b> Cambio de clave (menú superior «Cambiar clave»).</figcaption></figure>
+<div class="alerta"><b>Bloqueo por seguridad</b>Después de <b>5 intentos fallidos</b> la cuenta se bloquea durante <b>15 minutos</b>.
+  Espere ese tiempo o solicite a la DPDI que restablezca su clave.</div>
+<p>La sesión se cierra sola después de 8 horas. Al terminar, use <b>Salir</b> (esquina superior derecha), sobre todo en equipos compartidos.</p>
+
+<h1 class="cap" id="c3"><span class="num">3</span>La pantalla principal</h1>
+<figure><img src="../img/u03_inicio.png"><figcaption><b>Figura 3.</b> Pantalla de inicio de un responsable de unidad.</figcaption></figure>
+<table class="libre">
+  <tr><th>Zona</th><th>Descripción</th></tr>
+  <tr><td>Cabecera blanca</td><td>Logo, nombre del sistema, usuario conectado, rol, enlaces «Cambiar clave» y «Salir».</td></tr>
+  <tr><td>Barra de unidad (crema)</td><td>Unidad en formulación con el formato <b>Código del área - Centro de costo - Unidad orgánica</b> (por ejemplo <i>101109 - CENTRO DE INNOVACIÓN - Lima Sur</i>), estado de la ficha, macrogrupo y año. A la derecha, las descargas del libro oficial y de la Ficha resumen.</td></tr>
+  <tr><td>Menú</td><td>Inicio, Iniciativas, Funcionamiento, Otras operativas, Actividades propias, Inversión, Ficha resumen y Ayuda.</td></tr>
+  <tr><td>Contenido</td><td>Tarjetas, tablas y formularios de la sección elegida.</td></tr>
+</table>
+<h2>Cambiar de unidad</h2>
+<p>Si tiene más de una unidad asignada, pulse sobre el nombre de la unidad en la barra crema. Se abre un buscador: escriba parte del
+  código, del centro de costo o del nombre y elija la unidad. Todas las páginas pasan a mostrar la unidad seleccionada.</p>
+<figure class="media"><img src="../img/u04_selector_unidad.png"><figcaption><b>Figura 4.</b> Selector de unidad con búsqueda.</figcaption></figure>
+<h2>Cómo funcionan las pantallas de registro</h2>
+<ul>
+  <li><b>Tabla superior (maestro):</b> lista las actividades registradas. Haga clic en una fila para verla o editarla en el formulario.</li>
+  <li><b>Formulario:</b> botones <b>Nuevo</b> (limpia el formulario), <b>Guardar</b> (crea o actualiza) y <b>Eliminar</b> (pide confirmación).</li>
+  <li><b>Detalle:</b> en las hojas maestro-detalle, debajo aparece el detalle de partidas de la fila seleccionada, con su propio formulario.</li>
+  <li><b>Columnas calculadas</b> (totales, control, categoría NIIF) se completan solas; no se pueden digitar.</li>
+  <li>Los campos con lista desplegable aceptan escribir para filtrar. El botón 🔍 abre un buscador más amplio.</li>
+</ul>
+
+<h1 class="cap" id="c4"><span class="num">4</span>Inicio: estado, datos de la unidad y funcionamiento base</h1>
+<p>La página <b>Inicio</b> reúne la información general de su unidad:</p>
+<ul>
+  <li><b>Estado de la ficha:</b> Borrador, Enviada, Observada o Aprobada, con la fecha, el usuario del último cambio y, si la DPDI la observó,
+    el texto de la observación. Aquí está el botón <b>Enviar a revisión de la DPDI</b>.</li>
+  <li><b>Generador automático de códigos:</b> cuántas actividades tiene registradas por tipo. Los códigos (INI-01, OO-01, AP-01, INV-01…)
+    se asignan automáticamente al guardar.</li>
+  <li><b>Importar Ficha Excel:</b> carga una ficha ya llenada en el formato oficial (ver capítulo 12).</li>
+  <li><b>Datos de la unidad:</b> responsable, cargo, correo, anexo y demás datos de la sección 1 de la Ficha_Resumen.</li>
+  <li><b>Correr Actividades de Funcionamiento:</b> inserta la plantilla base de ingresos y egresos fijos (planillas, CTS, depreciación,
+    servicios básicos, provisiones) con distribución 1/12 por mes. Úselo una vez al iniciar; si lo repite con «Reemplazar» marcado, se
+    sustituyen solo las filas generadas por la plantilla.</li>
+  <li><b>Consumo de techos presupuestales:</b> compara lo registrado con el techo de cada tipo de actividad.</li>
+</ul>
+<figure class="media"><img src="../img/u14_estado_ficha.png"><figcaption><b>Figura 5.</b> Tarjeta «Estado de la ficha».</figcaption></figure>
+
+<h1 class="cap" id="c5"><span class="num">5</span>Iniciativas</h1>
+<p>Las iniciativas son las actividades que contribuyen a los objetivos anuales del POA y al Plan Estratégico Institucional (PEI).</p>
+<h2>Registrar una iniciativa (maestro)</h2>
+<ol class="pasos">
+  <li>Pulse <b>Nuevo</b>.</li>
+  <li>Elija el <b>Eje estratégico</b>. La lista de <b>Objetivo anual del POA</b> se filtra y muestra solo los objetivos de ese eje.</li>
+  <li>Elija el <b>Objetivo anual del POA</b>. El <b>OE del PEI</b> se completa automáticamente; no se digita.</li>
+  <li>Escriba el <b>nombre</b> de la iniciativa, el <b>indicador</b>, la <b>unidad de medida</b> (Unidad o Porcentaje (%)) y la <b>meta anual</b>.</li>
+  <li>Distribuya la meta en los trimestres <b>T1, T2 y T3</b>. La columna <b>Control</b> muestra «OK» cuando la suma coincide con la meta.</li>
+  <li>Indique el <b>responsable</b> y la <b>prioridad</b> y pulse <b>Guardar</b>.</li>
+</ol>
+<figure><img src="../img/u05_iniciativas_maestro.png"><figcaption><b>Figura 6.</b> Iniciativas: tabla maestra y formulario.</figcaption></figure>
+<h2>Registrar el detalle de partidas</h2>
+<p>Con la iniciativa seleccionada, en el panel de <b>detalle</b>:</p>
+<ol class="pasos">
+  <li>Pulse <b>Nuevo</b> en el detalle y elija el <b>tipo</b> (Egresos o Ingresos).</li>
+  <li>En <b>Partida</b> escriba o busque (🔍) la partida de gasto. Al elegirla, el sistema muestra su <b>descripción orientativa</b> y asigna
+    automáticamente la <b>categoría</b> y la <b>cuenta NIIF</b> correspondientes.</li>
+  <li>Registre la <b>cantidad</b>, la <b>moneda</b> (S/ o US$) y el <b>costo unitario</b>. El sistema convierte a soles con el tipo de cambio vigente.</li>
+  <li>Distribuya el total en los <b>meses</b> (Ene–Dic) escribiendo el <b>monto en soles</b> de cada mes. El control debe quedar
+    en «OK»: la suma de los meses debe ser igual al total de la línea.</li>
+  <li>Escriba el <b>sustento</b> (cotización, histórico de ejecución, contrato, etc.) y pulse <b>Guardar</b>.</li>
+</ol>
+<figure><img src="../img/u06_iniciativas_detalle.png"><figcaption><b>Figura 7.</b> Detalle de partidas de una iniciativa.</figcaption></figure>
+<figure class="media"><img src="../img/u07_buscador_partida.png"><figcaption><b>Figura 8.</b> Buscador de partidas con descripción orientativa.</figcaption></figure>
+<div class="tip"><b>Consejo</b>Si no encuentra una partida, búsquela por palabras clave (por ejemplo «material», «licencia», «pasajes»).
+  Si realmente no existe, comuníquelo a la DPDI para que la agregue al catálogo.</div>
+
+<h1 class="cap" id="c6"><span class="num">6</span>Funcionamiento: ingresos y egresos</h1>
+<p>Registra los conceptos permanentes de la unidad. La página tiene dos pestañas:</p>
+<ul>
+  <li><b>Egresos (FE):</b> partidas recurrentes. Indique cantidad y costo unitario (el coste total se calcula), si <b>aplica reajuste</b>
+    (se aplica el porcentaje y el mes de reajuste definidos por la DPDI), la <b>proporción mensual</b> y el sustento.</li>
+  <li><b>Ingresos (FI):</b> conceptos de ingreso de la unidad (pensiones, cursos, servicios), con cantidad, tarifa, porcentaje de becas,
+    si aplica morosidad, los <b>meses de cobro</b> y el sustento. El ingreso neto mensual = cantidad × tarifa × marca del mes × (1 − becas) × (1 − morosidad).</li>
+</ul>
+<figure><img src="../img/u08_funcionamiento_egresos.png"><figcaption><b>Figura 9.</b> Funcionamiento – egresos.</figcaption></figure>
+<figure><img src="../img/u09_funcionamiento_ingresos.png"><figcaption><b>Figura 10.</b> Funcionamiento – ingresos.</figcaption></figure>
+<div class="nota"><b>Meses en Funcionamiento</b>En estas dos pestañas los meses no llevan montos sino <b>proporciones</b>. En egresos,
+  <code>0.08333333</code> (1/12) en cada mes reparte el coste total en partes iguales durante el año. En ingresos y egresos puede
+  escribir <code>x</code> en un mes para marcarlo como mes completo de cobro o pago, o un factor (por ejemplo <code>0.5</code>).</div>
+
+<h1 class="cap" id="c7"><span class="num">7</span>Otras actividades operativas</h1>
+<p>Actividades de operación que no son iniciativas estratégicas (licencias de software, mantenimiento, eventos institucionales
+  recurrentes, etc.). El registro es igual al de iniciativas: maestro (nombre, categoría, responsable) y detalle de partidas con
+  distribución mensual y sustento.</p>
+<figure><img src="../img/u16_otras_operativas.png"><figcaption><b>Figura 11.</b> Otras actividades operativas.</figcaption></figure>
+
+<h1 class="cap" id="c8"><span class="num">8</span>Actividades propias</h1>
+<p>Actividades que deben <b>autofinanciarse</b> (cursos, diplomados, eventos con inscripción). En el detalle registre tanto los
+  <b>ingresos</b> como los <b>egresos</b>; la tabla maestra muestra el resultado (superávit o déficit). Indique el <b>tipo</b> y el
+  <b>mes de ejecución</b>: la directriz AP-02 lo exige.</p>
+<figure><img src="../img/u10_actividades_propias.png"><figcaption><b>Figura 12.</b> Actividades propias con ingresos y egresos.</figcaption></figure>
+
+<h1 class="cap" id="c9"><span class="num">9</span>Inversión</h1>
+<p>Proyectos de inversión de la unidad (equipamiento, infraestructura, tecnología). En el maestro registre el <b>tipo</b>, el
+  <b>proyecto</b> y si adjunta la <b>ficha de sustento</b>; en el detalle, los bienes o servicios con su cantidad, costo y meses.</p>
+<figure><img src="../img/u11_inversion.png"><figcaption><b>Figura 13.</b> Detalle de una inversión.</figcaption></figure>
+
+<h1 class="cap" id="c10"><span class="num">10</span>Ficha resumen y las 11 directrices DPDI</h1>
+<p>La <b>Ficha resumen</b> reproduce las 12 secciones de la hoja Ficha_Resumen del formato oficial y se actualiza al instante con lo
+  registrado. En la parte superior se muestra el <b>semáforo de directrices</b>: cada directriz indica «Cumple» o «Revisar» y la
+  lista de registros que debe corregir.</p>
+<figure><img src="../img/u12_directrices.png"><figcaption><b>Figura 14.</b> Semáforo de las 11 directrices DPDI.</figcaption></figure>
+<table class="libre">
+  <tr><th>Código</th><th>Qué controla</th><th>Cómo corregirlo</th></tr>
+  <tr><td>DF-01</td><td>Iniciativas sin eje, objetivo anual POA u OE.</td><td>Edite la iniciativa y elija eje y objetivo; el OE se completa solo.</td></tr>
+  <tr><td>DF-02</td><td>Iniciativas sin indicador, meta o responsable, o con T1+T2+T3 distinto de la meta.</td><td>Complete los campos y ajuste los trimestres hasta que Control diga «OK».</td></tr>
+  <tr><td>DP-01</td><td>Tipos de actividad que exceden su techo de egresos.</td><td>Reduzca montos o solicite a la DPDI la revisión del techo.</td></tr>
+  <tr><td>DP-02</td><td>Gasto sin iniciativa válida o iniciativas sin gasto.</td><td>Registre el detalle de partidas o elimine la iniciativa vacía.</td></tr>
+  <tr><td>DP-03</td><td>Egresos con monto y sin sustento.</td><td>Escriba el sustento en cada línea de detalle.</td></tr>
+  <tr><td>DP-04</td><td>Montos no distribuidos por mes, o meses sin monto.</td><td>Complete la distribución mensual hasta que el control sea «OK».</td></tr>
+  <tr><td>DP-05</td><td>Inversiones sin ficha de sustento, tipo o proyecto.</td><td>Complete el maestro de la inversión.</td></tr>
+  <tr><td>DI-01</td><td>Ingresos con cantidad y tarifa, sin meses de cobro.</td><td>Indique los meses de cobro en Funcionamiento – ingresos.</td></tr>
+  <tr><td>DI-02</td><td>Ingresos sin concepto o sin sustento.</td><td>Complete concepto y sustento.</td></tr>
+  <tr><td>AP-01</td><td>Actividades propias en déficit.</td><td>Ajuste ingresos o egresos hasta que la actividad se autofinancie.</td></tr>
+  <tr><td>AP-02</td><td>Actividades propias sin tipo o sin mes de ejecución.</td><td>Complete tipo y mes en el maestro.</td></tr>
+</table>
+<figure><img src="../img/u13_resumen_s1.png"><figcaption><b>Figura 15.</b> Sección 1: consumo de techos por tipo de actividad.</figcaption></figure>
+<div class="nota"><b>Techos</b>En la sección 1, «Dentro del techo» indica que el gasto programado no supera el techo; «Excede techo»
+  activa la directriz DP-01; «Sin techo» indica que hay gasto en un tipo de actividad sin techo asignado.</div>
+
+<h1 class="cap" id="c11"><span class="num">11</span>Envío a revisión y estados de la ficha</h1>
+<table class="libre">
+  <tr><th>Estado</th><th>Significado</th><th>¿Puede editar?</th></tr>
+  <tr><td><span class="chip borrador">Borrador</span></td><td>En elaboración por la unidad.</td><td>Sí</td></tr>
+  <tr><td><span class="chip enviada">Enviada</span></td><td>Enviada a la DPDI, pendiente de revisión.</td><td>No (solo lectura)</td></tr>
+  <tr><td><span class="chip observada">Observada</span></td><td>La DPDI devolvió la ficha con una observación.</td><td>Sí: corrija y vuelva a enviar</td></tr>
+  <tr><td><span class="chip aprobada">Aprobada</span></td><td>Ficha aprobada por la DPDI.</td><td>No</td></tr>
+</table>
+<ol class="pasos">
+  <li>Revise la <b>Ficha resumen</b>: todas las directrices deberían mostrar «Cumple» y los techos «Dentro del techo».</li>
+  <li>En <b>Inicio</b>, tarjeta «Estado de la ficha», pulse <b>Enviar a revisión de la DPDI</b> y confirme.</li>
+  <li>Si la ficha vuelve como <b>Observada</b>, lea la observación en la misma tarjeta, corrija y envíe nuevamente.</li>
+</ol>
+<figure><img src="../img/u17_solo_lectura.png"><figcaption><b>Figura 16.</b> Ficha enviada: las pantallas quedan en solo lectura.</figcaption></figure>
+<div class="alerta"><b>Fecha de cierre</b>Envíe la ficha antes de la fecha de cierre que aparece en la pantalla de acceso. Si necesita
+  modificar una ficha ya enviada o aprobada, solicite a la DPDI que la <b>reabra</b>.</div>
+
+<h1 class="cap" id="c12"><span class="num">12</span>Descargas e importación desde Excel</h1>
+<h2>Descargas (barra de la unidad)</h2>
+<ul>
+  <li><b>Libro oficial + BD NIIF (.xlsx):</b> la Ficha de Formulación con las 16 hojas del formato oficial más la hoja BD_CONSOLIDADA_NIIF.</li>
+  <li><b>Ficha resumen (.pdf):</b> documento de 12 secciones con espacios de firma, para el expediente de la unidad.</li>
+</ul>
+<h2>Importar una ficha Excel</h2>
+<p>Si su unidad ya avanzó la formulación en el archivo oficial, puede cargarlo en <b>Inicio → Importar Ficha Excel</b>:
+  seleccione el archivo <code>.xlsx</code> y pulse <b>Importar</b>. El sistema <b>reemplaza</b> los registros del año de la unidad con los
+  del archivo y muestra cuántas filas cargó por hoja y los avisos encontrados.</p>
+<div class="alerta"><b>Atención</b>La importación reemplaza lo registrado en línea para la unidad. Descargue antes el libro actual si quiere conservar una copia.</div>
+
+<h1 class="cap" id="c13"><span class="num">13</span>Preguntas frecuentes y solución de problemas</h1>
+<table class="libre">
+  <tr><th>Situación</th><th>Qué hacer</th></tr>
+  <tr><td>«No se puede acceder al sitio»</td><td>Verifique que está en la red de la universidad y que escribió bien la dirección. Si persiste, comuníquese con Tecnología.</td></tr>
+  <tr><td>«Usuario o clave incorrectos»</td><td>Revise mayúsculas y minúsculas. Tras 5 intentos fallidos espere 15 minutos o pida a la DPDI restablecer la clave.</td></tr>
+  <tr><td>Olvidé mi clave</td><td>Solicite a la DPDI una clave temporal; al ingresar se le pedirá cambiarla.</td></tr>
+  <tr><td>No veo mi unidad</td><td>Su usuario no tiene la unidad asignada. Pida a la DPDI que la agregue a su cuenta.</td></tr>
+  <tr><td>Los botones Guardar están deshabilitados</td><td>La ficha está Enviada o Aprobada (solo lectura) o su rol es Consulta.</td></tr>
+  <tr><td>La sesión expiró / «sesión vencida»</td><td>Vuelva a ingresar. Los datos guardados no se pierden; lo no guardado sí.</td></tr>
+  <tr><td>El OE no aparece</td><td>Primero elija el eje y luego el objetivo anual del POA; el OE se completa al guardar.</td></tr>
+  <tr><td>El control mensual no da «OK»</td><td>En los detalles, la suma de los montos mensuales debe ser igual al total de la línea. Revise decimales y meses vacíos.</td></tr>
+  <tr><td>Dos personas editan la misma unidad</td><td>Es posible, pero coordinen: si ambos editan la misma fila, prevalece el último en guardar.</td></tr>
+</table>
+
+<h1 class="cap" id="c14"><span class="num">14</span>Glosario</h1>
+<table class="libre">
+  <tr><th>Término</th><th>Definición</th></tr>
+  <tr><td>POA</td><td>Plan Operativo Anual.</td></tr>
+  <tr><td>PEI / OE</td><td>Plan Estratégico Institucional / Objetivo Estratégico del PEI.</td></tr>
+  <tr><td>DPDI</td><td>Dirección de Planeamiento y Desarrollo Institucional.</td></tr>
+  <tr><td>Techo presupuestal</td><td>Monto máximo de egresos asignado a la unidad por tipo de actividad.</td></tr>
+  <tr><td>Partida GG</td><td>Partida de gasto del catálogo de la universidad, asociada a una cuenta contable NIIF.</td></tr>
+  <tr><td>NIIF</td><td>Normas Internacionales de Información Financiera; la base consolidada clasifica cada monto por cuenta NIIF.</td></tr>
+  <tr><td>Maestro / detalle</td><td>Actividad (maestro) y sus líneas de partidas con montos mensuales (detalle).</td></tr>
+</table>
+<p class="firma">Dirección de Planeamiento y Desarrollo Institucional · Sistema POA - DPDI · Manual del usuario v1.0</p>
+</body>
+</html>

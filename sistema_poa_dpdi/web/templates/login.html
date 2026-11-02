@@ -1,19 +1,26 @@
 {% extends "base.html" %}
 {% block titulo %}Ingreso{% endblock %}
+{% block clase_main %}sin-marco{% endblock %}
 {% block contenido %}
+<div class="pagina-login">
 <section class="login">
   <div class="login-marca">
-    {% if hay_logo %}<img src="{{ url_for('marca_logo') }}" alt="Logo institucional">{% else %}<div class="marca-texto grande">POA<span>·</span>DPDI</div>{% endif %}
+    {% if hay_logo %}<div class="logo-blanco"><img src="{{ url_for('marca_logo') }}" alt="{{ institucion or 'Logo institucional' }}"></div>{% else %}<div class="marca-texto grande">POA<span>·</span>DPDI</div>{% endif %}
     <h1>Sistema de Formulación Presupuestal y Operativa POA</h1>
-    <p>Dirección de Planificación y Desarrollo Institucional · Proceso Gestión Estratégica GD-DO-01</p>
+    <div class="destacado">Planifica {{ anio }}</div>
+    <p>Dirección de Planificación y Desarrollo Institucional (DPDI) · Proceso Gestión Estratégica GD-DO-01 · Insumo PP-PR-02</p>
   </div>
   <form method="post" class="tarjeta login-form" autocomplete="on">
-    <h2>Ingresar</h2>
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <label>Usuario<input name="usuario" value="{{ usuario_previo }}" required autofocus autocomplete="username"></label>
-    <label>Clave<input name="clave" type="password" required autocomplete="current-password"></label>
-    <button class="btn btn-primario ancho">Ingresar</button>
-    <p class="nota">Solicite su usuario a la DPDI. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.</p>
+    <div class="login-banda"><span>Formulación POA {{ anio }}<br><small>Cierre de presentación</small></span>{% if cierre %}<strong>{{ cierre }}</strong>{% endif %}</div>
+    <div class="login-cuerpo">
+      <h2>Ingrese con su usuario</h2>
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <label>Usuario<input name="usuario" value="{{ usuario_previo }}" required autofocus autocomplete="username"></label>
+      <label>Clave<input name="clave" type="password" required autocomplete="current-password"></label>
+      <button class="btn btn-primario ancho">› Ingresar</button>
+      <p class="nota">Solicite su usuario a la DPDI. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.</p>
+    </div>
   </form>
 </section>
+</div>
 {% endblock %}
