@@ -37,7 +37,7 @@
     <li><a href="#c6">Unidades orgánicas y techos</a></li>
     <li><a href="#c7">Cuentas NIIF + Partidas GG</a></li>
     <li><a href="#c8">Catálogos estratégicos (Eje → Objetivo anual → OE)</a></li>
-    <li><a href="#c9">Costos de referencia y plantilla de funcionamiento</a></li>
+    <li><a href="#c9">Costos de referencia, plantilla de funcionamiento y morosidad</a></li>
     <li><a href="#c10">Usuarios y accesos</a></li>
     <li><a href="#c11">Tablero DPDI y revisión de fichas</a></li>
     <li><a href="#c12">Consolidación y reportes</a></li>
@@ -97,7 +97,7 @@
   <tr><td>Fecha límite de presentación</td><td>Se muestra en la pantalla de acceso como «cierre».</td></tr>
   <tr><td>Tipo de cambio</td><td>Convierte a soles los montos registrados en US$.</td></tr>
   <tr><td>Reajuste remunerativo (%) y mes de inicio</td><td>Se aplica a las filas de Funcionamiento – egresos con «Aplica reajuste = Sí».</td></tr>
-  <tr><td>Tasa de morosidad (%)</td><td>Se descuenta de los ingresos de funcionamiento con «Aplica morosidad = Sí».</td></tr>
+  <tr><td>Tasa de morosidad dura / incobrable (%)</td><td>Suma de los rangos de morosidad tratados como «Provisión» (capítulo 9). Si la cambia aquí y hay un solo rango de provisión, ese rango toma el nuevo valor.</td></tr>
   <tr><td>Inflación, UIT, RMV, estudiantes, pensiones, cuotas</td><td>Supuestos de referencia y bases de cálculo de la plantilla de funcionamiento.</td></tr>
   <tr><td>Director(a) y cargo DPDI</td><td>Firma «Revisado por» del PDF.</td></tr>
 </table>
@@ -161,7 +161,7 @@
   en Iniciativas, la lista de objetivos se filtre por eje y que el OE se complete automáticamente. Un objetivo sin eje no aparecerá
   al usuario; un objetivo sin OE dejará la iniciativa con la directriz DF-01 pendiente.</p>
 
-<h1 class="cap" id="c9"><span class="num">9</span>Costos de referencia y plantilla de funcionamiento</h1>
+<h1 class="cap" id="c9"><span class="num">9</span>Costos de referencia, plantilla de funcionamiento y morosidad</h1>
 <h2>Costos de referencia</h2>
 <p>Lista de costos unitarios de referencia (concepto, unidad de medida, costo en soles y fuente o vigencia) que las unidades consultan para
   estimar sus requerimientos.</p>
@@ -175,11 +175,33 @@
   <tr><td>Solo unidades que generan ingresos</td><td>Limita la fila a unidades con «¿Genera ingresos? = Sí».</td></tr>
   <tr><td>Tipo y cuenta NIIF</td><td>Egresos o Ingresos y la cuenta a la que se registra.</td></tr>
   <tr><td>Base de cálculo, porcentaje, monto fijo</td><td>Monto = base × porcentaje (1 = 100 %), o el monto fijo anual. Se prorratea 1/12 de enero a diciembre.</td></tr>
-  <tr><td>Aplica reajuste / morosidad</td><td>Aplica el reajuste (egresos) o la morosidad (ingresos) de los parámetros.</td></tr>
+  <tr><td>Aplica reajuste / morosidad</td><td>Aplica el reajuste (egresos) o los rangos de morosidad (ingresos).</td></tr>
 </table>
+<p>La base de cálculo <code>PROVISION_MOROSIDAD</code> (fila «Cuentas por cobrar comerciales – terceros») toma el <b>incobrable</b> calculado con los
+  rangos de provisión sobre los ingresos con «Aplica morosidad = Sí».</p>
+<h2>Rangos de morosidad</h2>
+<p>Menú <b>Administración → Rangos de morosidad</b>. Clasifica las cuotas por días de atraso. Valores iniciales:</p>
+<table class="libre">
+  <tr><th>Rango</th><th>Días</th><th>Tratamiento</th><th>Meses de desfase</th></tr>
+  <tr><td>TEMPRANA</td><td>0 – 30</td><td>Desfase de cobro</td><td>1</td></tr>
+  <tr><td>INTERMEDIA</td><td>31 – 180</td><td>Desfase de cobro</td><td>4</td></tr>
+  <tr><td>DURA</td><td>181 a más</td><td>Provisión</td><td>—</td></tr>
+</table>
+<figure><img src="../img/a11_morosidad.png"><figcaption><b>Figura 7.</b> Mantenedor de rangos de morosidad.</figcaption></figure>
+<ul>
+  <li><b>Tasa:</b> porcentaje del ingreso devengado que cae en ese rango (por ejemplo, 8 % de las cuotas se pagan con 0–30 días de atraso).
+    Las tasas inician en 0 % (salvo la dura, que toma la tasa de morosidad anterior): <b>regístrelas antes de abrir la formulación</b>.</li>
+  <li><b>Desfase de cobro:</b> esa parte se cobra N meses después; no reduce el ingreso del año. Si deja vacío «Meses de desfase», se usa el
+    punto medio del rango (por ejemplo, 31–180 días → 4 meses).</li>
+  <li><b>Provisión:</b> se estima incobrable y se registra como gasto; no reduce el ingreso (así no se descuenta dos veces).</li>
+  <li>El sistema impide rangos activos superpuestos y que las tasas sumen más de 100 %. Puede crear más rangos (por ejemplo, dividir la
+    intermedia en 31–60 y 61–180) o desactivar alguno.</li>
+  <li>Los rangos también están en la hoja <code>Rangos_Morosidad</code> de la plantilla de Parámetros y Catálogos, y el libro oficial incluye
+    la hoja anexa <code>Morosidad_Cobranza</code>.</li>
+</ul>
 
 <h1 class="cap" id="c10"><span class="num">10</span>Usuarios y accesos</h1>
-<figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 7.</b> Usuarios y accesos.</figcaption></figure>
+<figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 8.</b> Usuarios y accesos.</figcaption></figure>
 <h2>Crear un usuario</h2>
 <ol class="pasos">
   <li>Pulse <b>Nuevo</b> y escriba el <b>usuario</b> (se recomienda el usuario del correo institucional, por ejemplo <code>ana.alva</code>;
@@ -216,14 +238,14 @@
 <h1 class="cap" id="c11"><span class="num">11</span>Tablero DPDI y revisión de fichas</h1>
 <p>El <b>Tablero DPDI</b> resume, por unidad, el estado de la ficha, los montos registrados frente a los techos, las directrices pendientes
   y la fecha del último cambio. Use el buscador para filtrar y haga clic en una unidad para abrirla.</p>
-<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 8.</b> Tablero DPDI.</figcaption></figure>
+<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 9.</b> Tablero DPDI.</figcaption></figure>
 <h2>Revisar una ficha enviada</h2>
 <ol class="pasos">
   <li>Seleccione la unidad (desde el tablero o la barra de unidad).</li>
   <li>Revise la <b>Ficha resumen</b> y el semáforo de directrices; descargue el libro Excel o el PDF si necesita revisar fuera de línea.</li>
   <li>En <b>Inicio → Estado de la ficha</b> elija la acción:</li>
 </ol>
-<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 9.</b> Acciones de revisión del administrador.</figcaption></figure>
+<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 10.</b> Acciones de revisión del administrador.</figcaption></figure>
 <table class="libre">
   <tr><th>Acción</th><th>Desde</th><th>Resultado</th></tr>
   <tr><td>Aprobar</td><td>Enviada</td><td>La ficha queda <span class="chip aprobada">Aprobada</span> y en solo lectura para la unidad.</td></tr>
@@ -244,7 +266,7 @@
 <h1 class="cap" id="c13"><span class="num">13</span>Bitácora y respaldos</h1>
 <p>La <b>Bitácora</b> registra quién hizo qué y cuándo: ingresos, intentos fallidos, altas y cambios de registros, importaciones,
   descargas, cambios de estado y cambios de parámetros, con la dirección IP del equipo. Puede filtrarla por texto (usuario, unidad, acción).</p>
-<figure><img src="../img/a08_bitacora.png"><figcaption><b>Figura 10.</b> Bitácora de auditoría.</figcaption></figure>
+<figure><img src="../img/a08_bitacora.png"><figcaption><b>Figura 11.</b> Bitácora de auditoría.</figcaption></figure>
 <p>Tecnología programa respaldos automáticos diarios. Además, se recomienda que la DPDI descargue un <b>respaldo completo</b>:</p>
 <ul>
   <li>antes de cada importación masiva de la plantilla o de fichas Excel;</li>

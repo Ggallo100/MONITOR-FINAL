@@ -96,6 +96,15 @@ servidor agrega las tablas de usuarios y estados sin perder la información.
 La base SQLite en modo WAL admite decenas de usuarios trabajando a la vez (formulación por unidades, escrituras
 breves). Si la universidad prevé cientos de usuarios simultáneos, conviene migrar la capa de datos a PostgreSQL.
 
+### Morosidad por rangos
+
+*Administración → Rangos de morosidad* define rangos por días de atraso (por defecto: temprana 0–30, intermedia
+31–180 y dura >180) con su tasa y tratamiento. **Desfase de cobro** traslada la cobranza N meses (no reduce el
+ingreso); **Provisión** estima el incobrable y alimenta la fila `PROVISION_MOROSIDAD` de la plantilla de
+funcionamiento. El ingreso de `Funcionamiento_Ing` es devengado (solo descuenta becas), por lo que la morosidad no se
+descuenta dos veces. La Ficha resumen incluye la sección *2.1 Morosidad y cobranza proyectada* y el libro oficial la
+hoja anexa `Morosidad_Cobranza`; la plantilla de parámetros, la hoja `Rangos_Morosidad` (opcional al importar).
+
 ### Manuales y soporte
 
 Los manuales en PDF están en `manuales/pdf/` y se publican en la página **Ayuda** del sistema según el rol:

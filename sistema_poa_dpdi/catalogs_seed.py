@@ -688,6 +688,33 @@ def _migrar_bd_existente(db) -> None:
     db.set_meta("version_catalogos", "2")
 
 
+# Rangos de morosidad por días de atraso (mantenedor «Rangos de morosidad»).
+# (código, nombre, días desde, días hasta [None = sin límite], tratamiento, meses de desfase, descripción)
+RANGOS_MOROSIDAD = [
+    ("TEMPRANA", "Morosidad temprana", 0, 30, "Desfase de cobro", 1,
+     "Cuotas pagadas con hasta 30 días de atraso: el ingreso se cobra al mes siguiente."),
+    ("INTERMEDIA", "Morosidad intermedia", 31, 180, "Desfase de cobro", 4,
+     "Cuotas pagadas con 31 a 180 días de atraso: se recuperan en promedio 4 meses después."),
+    ("DURA", "Morosidad dura o incobrable", 181, None, "Provisión", 0,
+     "Más de 180 días de atraso: se estima incobrable y se registra como provisión (gasto)."),
+]
+
+
+def _sembrar_rangos_morosidad(db) -> None:
+    """Crea los rangos por defecto una sola vez. La tasa única anterior pasa a la morosidad dura (provisión)."""
+    if db.meta("rangos_morosidad") == "1":
+        return
+    if not db.scalar("SELECT COUNT(*) FROM rangos_morosidad"):
+        anterior = db.scalar("SELECT tasa_morosidad_pct FROM parametros_globales WHERE id=1") or 0.0
+        for i, (cod, nom, d1, d2, trat, meses, desc) in enumerate(RANGOS_MOROSIDAD):
+            db.conn.execute(
+                "INSERT INTO rangos_morosidad (codigo, nombre, dias_desde, dias_hasta, tasa_pct, tratamiento, "
+                "meses_desfase, descripcion, orden) VALUES (?,?,?,?,?,?,?,?,?)",
+                (cod, nom, d1, d2, anterior if trat == "Provisión" else 0.0, trat, meses, desc, i))
+    db.conn.commit()
+    db.set_meta("rangos_morosidad", "1")
+
+
 def seed_database(db) -> None:
     """Pre-puebla (idempotente) catálogos, parámetros y unidades iniciales."""
     conn = db.conn
@@ -739,3 +766,4 @@ def seed_database(db) -> None:
         )
     conn.commit()
     _migrar_bd_existente(db)
+    _sembrar_rangos_morosidad(db)
