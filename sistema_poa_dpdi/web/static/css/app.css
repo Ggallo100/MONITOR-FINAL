@@ -247,3 +247,9 @@ pre { white-space: pre-wrap; font-size: 12px; }
 .manual { display: flex; flex-direction: column; gap: 6px; border-top: 4px solid var(--primario); }
 .manual .btn { align-self: flex-start; margin-top: auto; }
 .guia li { margin-bottom: 6px; }
+
+/* Actualización masiva en pasos */
+.pasos-carga { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.paso-carga { border: 1px solid var(--divisor); border-radius: 8px; padding: 14px; background: #fff; }
+.paso-carga > strong { display: block; color: var(--primario); margin-bottom: 4px; }
+.paso-carga .nota { min-height: 3em; }

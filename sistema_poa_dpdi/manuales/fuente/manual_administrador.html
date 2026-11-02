@@ -112,19 +112,17 @@
 <h1 class="cap" id="c5"><span class="num">5</span>Plantilla de Parámetros y Catálogos (actualización masiva)</h1>
 <p>En la tarjeta <b>Actualización masiva</b> de la misma página:</p>
 <ol class="pasos">
-  <li><b>Descargar plantilla de Parámetros y Catálogos (.xlsx)</b>: obtiene un libro con los datos actuales y una hoja por tema:
+  <li><b>1. Descargar → Descargar plantilla (.xlsx)</b>: obtiene un libro con los datos actuales y una hoja por tema:
     <code>Datos_Generales</code>, <code>Unidades_Techos</code>, <code>Cuentas_NIIF_Partidas_GG</code>, <code>Catalogos_Estrategicos</code>,
     <code>Costos_Referencia</code> y <code>Plantilla_Funcionamiento</code>.</li>
   <li>Modifique el libro en Excel respetando los encabezados. Para filas nuevas deje vacía la columna <b>ID</b>; para modificar una fila
     existente conserve su ID. Las unidades se identifican por su <b>código de área</b>: si el código ya existe, se actualizan sus datos y techos.</li>
-  <li><b>Importar plantilla</b>: seleccione el archivo y pulse el botón. El sistema muestra cuántas filas actualizó por hoja y los avisos
-    (por ejemplo, valores no válidos), sin detener la carga del resto.</li>
+  <li><b>2. Importar</b>: seleccione el archivo y pulse <b>Importar</b>. El sistema reconoce el tipo de archivo, muestra cuántas filas
+    actualizó por hoja y los avisos (por ejemplo, objetivos sin eje u OE, o valores no válidos), sin detener la carga del resto.</li>
 </ol>
-<p>Otras opciones de la tarjeta:</p>
-<ul>
-  <li><b>Importar parámetros desde una Ficha Excel:</b> toma los datos generales y techos de una ficha oficial llenada (hoja Parámetros).</li>
-  <li><b>BD NIIF consolidada de todas las unidades</b> y <b>Respaldo completo de la base de datos</b> (ver capítulos 12 y 13).</li>
-</ul>
+<p>En el mismo recuadro <b>2. Importar</b> también puede cargar una <b>Ficha_Formulacion_POA</b> llenada: el sistema toma su hoja
+  «Parámetros» (datos generales y techos de la unidad). El recuadro <b>Reportes y respaldo</b> ofrece el <b>Respaldo completo de la base</b>
+  y la <b>BD NIIF consolidada de todas las unidades</b> (ver capítulos 12 y 13).</p>
 <div class="tip"><b>Recomendación</b>Antes de una importación masiva descargue un <b>respaldo completo</b>. Si algo sale mal, Tecnología puede restaurarlo.</div>
 
 <h1 class="cap" id="c6"><span class="num">6</span>Unidades orgánicas y techos</h1>
@@ -226,8 +224,8 @@
   <tr><th>Reporte</th><th>Dónde</th><th>Contenido</th></tr>
   <tr><td>Libro oficial + BD NIIF</td><td>Barra de la unidad</td><td>Ficha de Formulación de la unidad seleccionada en el formato oficial (16 hojas) más la hoja BD_CONSOLIDADA_NIIF.</td></tr>
   <tr><td>Ficha resumen (PDF)</td><td>Barra de la unidad</td><td>12 secciones y espacios de firma.</td></tr>
-  <tr><td>BD NIIF consolidada de todas las unidades</td><td>Parámetros → Actualización masiva</td><td>Una fila por concepto y mes de todas las unidades, con cuenta NIIF, categoría y partida, lista para tablas dinámicas o Power BI.</td></tr>
-  <tr><td>Respaldo completo</td><td>Parámetros → Actualización masiva</td><td>Copia de la base de datos (archivo .sqlite3) para archivo o restauración por Tecnología.</td></tr>
+  <tr><td>BD NIIF consolidada de todas las unidades</td><td>Parámetros → Reportes y respaldo</td><td>Una fila por concepto y mes de todas las unidades, con cuenta NIIF, categoría y partida, lista para tablas dinámicas o Power BI.</td></tr>
+  <tr><td>Respaldo completo</td><td>Parámetros → Reportes y respaldo</td><td>Copia de la base de datos (archivo .sqlite3) para archivo o restauración por Tecnología.</td></tr>
 </table>
 
 <h1 class="cap" id="c13"><span class="num">13</span>Bitácora y respaldos</h1>

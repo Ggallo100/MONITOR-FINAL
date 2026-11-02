@@ -27,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.1 (estilo portal UA)"
+VERSION_APP = "2.2"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
@@ -417,6 +417,19 @@ def _enviar(path: Path, nombre: str):
     datos = io.BytesIO(path.read_bytes())
     shutil.rmtree(path.parent, ignore_errors=True)
     return send_file(datos, as_attachment=True, download_name=nombre)
+
+
+def _importar_parametros_auto(path: Path) -> dict:
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True)
+    hojas = set(wb.sheetnames)
+    wb.close()
+    if {"Datos_Generales", "Unidades_Techos"} & hojas:
+        return {"Archivo reconocido": "Plantilla de Parámetros y Catálogos", **ctrl().import_plantilla_parametros(path)}
+    if "Parámetros" in hojas:
+        return {"Archivo reconocido": "Parámetros de una Ficha Excel", **ctrl().import_parametros(path)}
+    raise ValueError("El archivo no es la plantilla de Parámetros y Catálogos (hojas Datos_Generales, Unidades_Techos…) "
+                     "ni una Ficha_Formulacion_POA (hoja «Parámetros»).")
 
 
 def _procesar_upload(fn, extensiones=(".xlsx", ".xlsm", ".csv")):
@@ -1049,17 +1062,13 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         return jsonify(rep)
 
     @app.post("/cargas/plantilla-parametros")
-    def carga_plantilla():
-        _solo_admin()
-        rep = _procesar_upload(ctrl().import_plantilla_parametros, (".xlsx",))
-        log("Importar plantilla de parámetros")
-        return jsonify(rep)
-
     @app.post("/cargas/parametros-ficha")
-    def carga_param_ficha():
+    def carga_plantilla():
+        """Acepta la plantilla de Parámetros y Catálogos o una Ficha_Formulacion_POA (hoja «Parámetros»):
+        el tipo se reconoce por las hojas del archivo, sin importar el botón usado."""
         _solo_admin()
-        rep = _procesar_upload(ctrl().import_parametros, (".xlsx", ".xlsm"))
-        log("Importar parámetros desde ficha")
+        rep = _procesar_upload(_importar_parametros_auto, (".xlsx", ".xlsm"))
+        log("Importar parámetros", rep["Archivo reconocido"])
         return jsonify(rep)
 
     @app.post("/cargas/niif")

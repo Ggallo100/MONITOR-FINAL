@@ -193,6 +193,24 @@ class WebTest(unittest.TestCase):
                   "nueva_clave": "Nueva2027b", "unidades": [str(unidades[0]["id"])]})
         self.cliente("rosa.paz", "Nueva2027b")
 
+    def test_importar_parametros_reconoce_el_archivo(self):
+        plantilla = self.admin.get("/descargas/plantilla-parametros").data
+        libro = self.admin.get("/descargas/libro").data
+        for url in ("/cargas/plantilla-parametros", "/cargas/parametros-ficha"):  # cualquiera de los dos botones
+            rep = self.api(self.admin, "POST", url, data={"archivo": (io.BytesIO(plantilla), "plantilla.xlsx")},
+                           content_type="multipart/form-data")
+            self.assertEqual(rep["Archivo reconocido"], "Plantilla de Parámetros y Catálogos")
+            self.assertGreater(rep["Unidades y techos"], 0)
+            rep = self.api(self.admin, "POST", url, data={"archivo": (io.BytesIO(libro), "ficha.xlsx")},
+                           content_type="multipart/form-data")
+            self.assertEqual(rep["Archivo reconocido"], "Parámetros de una Ficha Excel")
+        import openpyxl
+        otro = io.BytesIO()
+        openpyxl.Workbook().save(otro)
+        rep = self.api(self.admin, "POST", "/cargas/plantilla-parametros", codigo=400,
+                       data={"archivo": (io.BytesIO(otro.getvalue()), "otro.xlsx")}, content_type="multipart/form-data")
+        self.assertIn("no es la plantilla", str(rep))
+
     def test_migra_colores_de_la_version_anterior(self):
         from database import Database
         from web.app import create_app

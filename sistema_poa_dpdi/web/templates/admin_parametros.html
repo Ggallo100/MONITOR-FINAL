@@ -4,12 +4,25 @@
 <div class="titulo-pagina"><h1>Parámetros, plantilla e identidad gráfica</h1><p>Datos generales, supuestos de formulación, actualización masiva y apariencia del sistema.</p></div>
 <section class="tarjeta">
   <h2>Actualización masiva</h2>
-  <div class="fila-form">
-    <a class="btn btn-primario" href="{{ url_for('desc_plantilla') }}">⬇ Descargar plantilla de Parámetros y Catálogos (.xlsx)</a>
-    <form class="fila-form" data-carga="/cargas/plantilla-parametros"><input type="file" name="archivo" accept=".xlsx" required><button class="btn">⬆ Importar plantilla</button></form>
-    <form class="fila-form" data-carga="/cargas/parametros-ficha"><input type="file" name="archivo" accept=".xlsx,.xlsm" required><button class="btn">Importar parámetros desde una Ficha Excel</button></form>
-    <a class="btn" href="{{ url_for('desc_bd', alcance='todas') }}">⬇ BD NIIF consolidada de todas las unidades</a>
-    <a class="btn" href="{{ url_for('desc_respaldo') }}">⬇ Respaldo completo de la base de datos</a>
+  <div class="pasos-carga">
+    <div class="paso-carga">
+      <strong>1. Descargar</strong>
+      <p class="nota">Plantilla con los datos actuales: datos generales, unidades y techos, cuentas NIIF + partidas GG, catálogos, costos y plantilla de funcionamiento.</p>
+      <a class="btn btn-primario" href="{{ url_for('desc_plantilla') }}">⬇ Descargar plantilla (.xlsx)</a>
+    </div>
+    <div class="paso-carga">
+      <strong>2. Importar</strong>
+      <p class="nota">Seleccione la plantilla llenada <em>o</em> una Ficha_Formulacion_POA (se toma su hoja «Parámetros»). El sistema reconoce el tipo de archivo.</p>
+      <form class="fila-form" data-carga="/cargas/plantilla-parametros"><input type="file" name="archivo" accept=".xlsx,.xlsm" required><button class="btn btn-primario">⬆ Importar</button></form>
+    </div>
+    <div class="paso-carga">
+      <strong>Reportes y respaldo</strong>
+      <p class="nota">Descargue un respaldo antes de cada importación masiva.</p>
+      <div class="fila-form">
+        <a class="btn" href="{{ url_for('desc_respaldo') }}">⬇ Respaldo completo de la base</a>
+        <a class="btn" href="{{ url_for('desc_bd', alcance='todas') }}">⬇ BD NIIF consolidada (todas las unidades)</a>
+      </div>
+    </div>
   </div>
 </section>
 <div class="grilla-2">

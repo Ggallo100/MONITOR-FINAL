@@ -298,7 +298,7 @@ server {
   <li>Copie la carpeta completa <code>datos_web</code> (base de datos, <code>secret_key.txt</code>, <code>marca/</code>, <code>respaldos/</code>) a la
     carpeta de datos del servidor (<code>D:\DatosPOA</code>, <code>/var/lib/poa</code> o <code>./datos</code> en Docker). Si existen archivos
     <code>-wal</code>/<code>-shm</code> con el servidor detenido, cópielos junto con la base.</li>
-  <li>Como alternativa sin detener el servicio, la DPDI puede descargar el <b>Respaldo completo</b> (Parámetros → Actualización masiva) y TI
+  <li>Como alternativa sin detener el servicio, la DPDI puede descargar el <b>Respaldo completo</b> (Parámetros → Reportes y respaldo) y TI
     lo copia como <code>poa_dpdi_web.sqlite3</code> en la carpeta de datos del servidor (el logo se vuelve a subir).</li>
   <li>En Linux/Docker ajuste el propietario: <code>sudo chown -R poa:poa /var/lib/poa</code> (o <code>1000:1000 ./datos</code>).</li>
   <li>Inicie el servicio en el servidor, verifique <code>/salud</code>, ingrese con un administrador y revise que el tablero muestre las

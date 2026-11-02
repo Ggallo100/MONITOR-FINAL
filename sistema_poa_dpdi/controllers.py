@@ -1938,10 +1938,15 @@ class POAController:
                     oe = code_display(s(row["padre"]))
                     data["eje"] = eje["codigo"] if eje else s(row["eje"])
                     data["padre"] = oe
-                    if not eje:
+                    if not s(row["eje"]):
+                        rep["avisos"].append(f"Objetivo {code}: falta el eje estratégico (no se mostrará en Iniciativas "
+                                             "hasta completarlo).")
+                    elif not eje:
                         rep["avisos"].append(f"Objetivo {code}: eje «{s(row['eje'])}» no existe en el catálogo.")
-                    if not self.db.query_one("SELECT 1 FROM catalogos_estrategicos WHERE tipo_catalogo='OE' AND codigo=?",
-                                             (oe,)):
+                    if not oe:
+                        rep["avisos"].append(f"Objetivo {code}: falta el OE del PEI.")
+                    elif not self.db.query_one("SELECT 1 FROM catalogos_estrategicos WHERE tipo_catalogo='OE' "
+                                               "AND codigo=?", (oe,)):
                         rep["avisos"].append(f"Objetivo {code}: OE «{oe}» no existe en el catálogo.")
                 old = self.db.query_one("SELECT id FROM catalogos_estrategicos WHERE tipo_catalogo=? AND codigo=?",
                                         (tipo, code))

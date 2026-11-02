@@ -671,11 +671,15 @@
   document.addEventListener("submit", async (e) => {
     const f = e.target.closest("form[data-carga]"); if (!f) return;
     e.preventDefault();
+    const boton = f.querySelector("button"), texto = boton ? boton.textContent : "";
+    if (boton) { boton.disabled = true; boton.textContent = "Procesando…"; }
     try {
       const rep = await POA.api("POST", f.dataset.carga, new FormData(f));
       const avisos = rep.avisos || [];
       const txt = Object.entries(rep).filter(([k]) => k !== "avisos").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
       POA.modal("Carga completada", `<pre>${esc(txt)}</pre>${avisos.length ? "<h4>Avisos</h4><ul>" + avisos.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join("") + "</ul>" : ""}<button class="btn btn-primario" onclick="location.reload()">Aceptar</button>`);
-    } catch (err) { /* */ }
+    } catch (err) { /* el mensaje de error ya se mostró */ } finally {
+      if (boton) { boton.disabled = false; boton.textContent = texto; }
+    }
   });
 })();
