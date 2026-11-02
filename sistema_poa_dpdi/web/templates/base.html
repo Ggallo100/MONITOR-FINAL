@@ -8,7 +8,7 @@
   {% if tema.tema_fuente %}
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ tema.tema_fuente|replace(' ', '+') }}:wght@400;600;700&display=swap">
   {% endif %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v_est }}">
   <style>
     :root {
       --primario: {{ tema.tema_primario }};
@@ -89,7 +89,7 @@
 <footer class="pie">{{ institucion }} · Dirección de Planificación y Desarrollo Institucional (DPDI) · Sistema POA {{ anio or '' }}</footer>
 <script>window.POA_CTX = {{ {'unidades': unidades, 'editable': editable, 'rol': usuario.rol if usuario else None,
   'uid': unidad.id if unidad else None}|tojson }};</script>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ v_est }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from web.app import create_app  # noqa: E402
+from web.app import VERSION_APP, create_app  # noqa: E402
 
 
 def main() -> None:
@@ -34,7 +34,7 @@ def main() -> None:
     args = ap.parse_args()
     app = create_app()
     from waitress import serve
-    print(f"Sistema POA - DPDI (web) en http://{args.host}:{args.port}  · datos: {app.config['DATA_DIR']}", flush=True)
+    print(f"Sistema POA - DPDI (web) versión {VERSION_APP} en http://{args.host}:{args.port}  · datos: {app.config['DATA_DIR']}", flush=True)
     opciones = {"host": args.host, "port": args.port, "threads": args.threads,
                 "url_scheme": "https" if os.environ.get("POA_HTTPS") == "1" else "http"}
     if os.environ.get("POA_PROXY"):  # IP del proxy inverso HTTPS (IIS, Nginx, Apache) que antecede al servidor

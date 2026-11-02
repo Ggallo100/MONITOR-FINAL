@@ -27,6 +27,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
+VERSION_APP = "2.1 (estilo portal UA)"
+# Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
+VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
@@ -43,6 +46,8 @@ MAX_INTENTOS = 5
 BLOQUEO_MIN = 15
 # Paleta del portal institucional (www.autonoma.pe): naranja de marca, títulos gris oscuro y botones naranjas.
 TEMA_DEFECTO = {"tema_primario": "#FF6600", "tema_secundario": "#333333", "tema_acento": "#FF6600", "tema_fuente": ""}
+# Paleta de la primera versión web (azul/rojo). Si quedó guardada en la base, se reemplaza por la del portal UA.
+TEMA_ANTERIOR = {"tema_primario": "#1F3864", "tema_secundario": "#2E5597", "tema_acento": "#C8102E"}
 MESES_CORTOS = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SET", "OCT", "NOV", "DIC"]
 KINDS = ("INI", "OO", "AP", "INV")
 SLUG_KIND = {"iniciativas": "INI", "otras-operativas": "OO", "actividades-propias": "AP", "inversion": "INV"}
@@ -73,6 +78,7 @@ def create_app(data_dir: Optional[str] = None, db_path: Optional[str] = None, te
     # Inicializa la base (esquema, catálogos oficiales, migraciones) y el administrador inicial.
     db = Database(app.config["DB_PATH"])
     _crear_admin_inicial(db, data)
+    _migrar_tema(db)
     db.close()
 
     app.teardown_appcontext(_close_db)
@@ -90,6 +96,17 @@ def _secret_key(data: Path) -> str:
     if not f.exists():
         f.write_text(secrets.token_hex(32), encoding="utf-8")
     return f.read_text(encoding="utf-8").strip()
+
+
+def _migrar_tema(db: Database) -> None:
+    """Una sola vez: reemplaza los colores por defecto de la versión anterior por la paleta del portal UA.
+    Los colores que la DPDI haya personalizado (distintos de los antiguos por defecto) se respetan."""
+    if db.meta("tema_version") == "ua":
+        return
+    for k, viejo in TEMA_ANTERIOR.items():
+        if (db.meta(k) or "").upper() == viejo:
+            db.set_meta(k, TEMA_DEFECTO[k])
+    db.set_meta("tema_version", "ua")
 
 
 def _crear_admin_inicial(db: Database, data: Path) -> None:
@@ -266,7 +283,7 @@ def _contexto_plantillas():
     ctx = {"csrf": session.get("csrf", ""), "usuario": u, "roles": ROLES, "tema": tema(),
            "hay_logo": _logo_path() is not None, "anio": s(prm.get("anio_formulacion")), "cierre": cierre,
            "institucion": s(prm.get("institucion")), "unidad": None, "unidades": [],
-           "editable": False, "es_admin": bool(u and u["rol"] == "ADMIN")}
+           "editable": False, "es_admin": bool(u and u["rol"] == "ADMIN"), "v_est": VERSION_ESTATICOS}
     if u:
         c = ctrl()
         ctx["anio"] = c.anio
@@ -478,7 +495,7 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
 
     @app.get("/salud")
     def salud():
-        return jsonify(ok=True, hora=datetime.now().isoformat(timespec="seconds"))
+        return jsonify(ok=True, version=VERSION_APP, hora=datetime.now().isoformat(timespec="seconds"))
 
     @app.get("/marca/logo")
     def marca_logo():

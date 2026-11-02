@@ -193,6 +193,21 @@ class WebTest(unittest.TestCase):
                   "nueva_clave": "Nueva2027b", "unidades": [str(unidades[0]["id"])]})
         self.cliente("rosa.paz", "Nueva2027b")
 
+    def test_migra_colores_de_la_version_anterior(self):
+        from database import Database
+        from web.app import create_app
+        bd = Database(self.app.config["DB_PATH"], seed=False, init=False)
+        for k, v in {"tema_primario": "#1F3864", "tema_secundario": "#2E5597", "tema_acento": "#123456"}.items():
+            bd.set_meta(k, v)
+        bd.set_meta("tema_version", "")
+        bd.close()
+        app = create_app(data_dir=self.tmp.name, testing=True)  # reinicio del servidor tras actualizar
+        html = app.test_client().get("/login").get_data(as_text=True)
+        self.assertIn("--primario: #FF6600", html)
+        self.assertIn("--secundario: #333333", html)
+        self.assertIn("#123456", html)  # un color personalizado por la DPDI se respeta
+        self.assertRegex(html, r"css/app\.css\?v=\d+")
+
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
         self.assertIn("--primario: #123456", self.admin.get("/").get_data(as_text=True))
