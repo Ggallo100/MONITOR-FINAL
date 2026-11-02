@@ -27,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.2"
+VERSION_APP = "2.3"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
@@ -943,7 +943,16 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         d = {k: v for k, v in (request.get_json(force=True) or {}).items() if not k.startswith("_")}
         new = _admin_save(entidad, d, rid)
         log(f"Guardar {entidad}", str(new))
-        return jsonify(id=new)
+        extra = {}
+        if entidad == "usuarios":
+            if g.get("clave_temporal"):
+                extra["clave_temporal"] = g.clave_temporal
+            fila = db().query_one("SELECT usuario, rol FROM usuarios WHERE id=?", (new,))
+            extra["usuario"] = fila["usuario"]
+            if fila["rol"] == "RESPONSABLE" and not db().scalar(
+                    "SELECT COUNT(*) FROM usuario_unidades WHERE usuario_id=?", (new,)):
+                extra["aviso"] = "El responsable no tiene unidades asignadas: no podrá formular hasta asignarle alguna."
+        return jsonify(id=new, **extra)
 
     @app.delete("/api/admin/t/<entidad>/<int:rid>")
     def api_admin_delete(entidad, rid):
@@ -1069,6 +1078,21 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         _solo_admin()
         rep = _procesar_upload(_importar_parametros_auto, (".xlsx", ".xlsm"))
         log("Importar parámetros", rep["Archivo reconocido"])
+        return jsonify(rep)
+
+    @app.get("/descargas/plantilla-usuarios")
+    def desc_plantilla_usuarios():
+        _solo_admin()
+        tmp = Path(tempfile.mkdtemp(prefix="poa_")) / "usuarios.xlsx"
+        _plantilla_usuarios(tmp)
+        log("Descargar plantilla de usuarios")
+        return _enviar(tmp, "Plantilla_Usuarios_POA_DPDI.xlsx")
+
+    @app.post("/cargas/usuarios")
+    def carga_usuarios():
+        _solo_admin()
+        rep = _procesar_upload(_importar_usuarios, (".xlsx",))
+        log("Importar usuarios", f"{rep['Usuarios creados']} creados, {rep['Usuarios actualizados']} actualizados")
         return jsonify(rep)
 
     @app.post("/cargas/niif")
@@ -1211,8 +1235,20 @@ def _admin_save(entidad: str, d: dict, rid: Optional[int]) -> int:
     abort(404)
 
 
+def normalizar_usuario(texto: Any) -> str:
+    """«Pedro Ruíz » → «pedro.ruiz»: minúsculas, sin tildes y con puntos en lugar de espacios."""
+    import unicodedata
+    v = unicodedata.normalize("NFKD", s(texto)).encode("ascii", "ignore").decode().lower().strip()
+    return re.sub(r"\s+", ".", v)
+
+
+def _clave_temporal() -> str:
+    return secrets.token_urlsafe(7).replace("-", "x").replace("_", "y") + str(secrets.randbelow(10))
+
+
 def _guardar_usuario(d: dict, rid: Optional[int]) -> int:
-    nombre_u = s(d.get("usuario")).lower()
+    """Crea o actualiza un usuario. Si es nuevo y no se indicó clave, genera una temporal (g.clave_temporal)."""
+    nombre_u = normalizar_usuario(d.get("usuario"))
     if not re.fullmatch(r"[a-z0-9._@\-]{3,80}", nombre_u):
         raise ValueError("Usuario no válido: use de 3 a 80 caracteres (letras, números, punto, guion, @).")
     rol = d.get("rol") if d.get("rol") in ROLES else "RESPONSABLE"
@@ -1225,14 +1261,16 @@ def _guardar_usuario(d: dict, rid: Optional[int]) -> int:
     yo = usuario()
     if rid == yo["id"] and (rol != "ADMIN" or not data["activo"]):
         raise ValueError("No puede quitarse a sí mismo el rol de administrador ni desactivarse.")
-    clave = d.get("nueva_clave") or ""
+    clave = s(d.get("nueva_clave"))
+    if not clave and not rid:
+        clave = _clave_temporal()
+        g.clave_temporal = clave
+        data["debe_cambiar_clave"] = 1
     if clave:
         if not _clave_valida(clave):
             raise ValueError("La clave debe tener al menos 8 caracteres, con letras y números.")
         data["password_hash"] = generate_password_hash(clave)
         data.update(intentos_fallidos=0, bloqueado_hasta="")  # restablecer la clave también desbloquea
-    elif not rid:
-        raise ValueError("Asigne una clave inicial al nuevo usuario.")
     if rid:
         db().update("usuarios", rid, data)
     else:
@@ -1242,9 +1280,151 @@ def _guardar_usuario(d: dict, rid: Optional[int]) -> int:
     for uid in unidades:
         db().execute("INSERT OR IGNORE INTO usuario_unidades (usuario_id, unidad_id) VALUES (?,?)", (rid, uid))
     db().conn.commit()
-    if rol == "RESPONSABLE" and not unidades:
-        flash("Aviso: el responsable no tiene unidades asignadas.", "aviso")
     return rid
+
+
+# ----------------------------------------------------------- carga masiva de usuarios
+COLS_USUARIOS = [("usuario", "Usuario", 22), ("nombre", "Nombre completo", 34), ("correo", "Correo", 32),
+                 ("rol", "Rol (RESPONSABLE / CONSULTA / ADMIN)", 22),
+                 ("unidades", "Códigos de área asignados (separados por coma)", 40),
+                 ("clave", "Clave temporal (opcional)", 22), ("activo", "Activo (Sí/No)", 12)]
+
+
+def _codigo_texto(v: Any) -> str:
+    """Los códigos de área numéricos llegan de Excel como 10110101.0."""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return s(v)
+
+
+def _plantilla_usuarios(path: Path) -> None:
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.worksheet.datavalidation import DataValidation
+    c = ctrl()
+    wb = openpyxl.Workbook()
+    ins = wb.active
+    ins.title = "Instrucciones"
+    for fila in (["Carga masiva de usuarios - Sistema POA DPDI"], [],
+                 ["1. Complete la hoja «Usuarios»: una fila por persona. Las filas existentes se actualizan por su usuario."],
+                 ["2. Usuario: letras, números, punto, guion o @ (por ejemplo ana.alva). Los espacios se cambian por puntos."],
+                 ["3. Rol: RESPONSABLE (formula sus unidades), CONSULTA (solo lectura) o ADMIN (DPDI)."],
+                 ["4. Códigos de área: los de la hoja «Unidades», separados por coma. Obligatorio para RESPONSABLE."],
+                 ["5. Clave temporal: si la deja vacía en un usuario nuevo, el sistema genera una. En usuarios existentes,"
+                  " vacía = no cambiar la clave. Todos deben cambiarla en su primer ingreso."],
+                 ["6. La hoja «Sugeridos» propone usuarios a partir del responsable y correo de cada unidad: copie a"
+                  " «Usuarios» solo las filas que correspondan."],
+                 ["7. Importe el archivo en Administración → Usuarios y accesos → Importar usuarios."
+                  " Al terminar podrá descargar la lista de claves temporales para entregarlas."]):
+        ins.append(fila)
+    ins["A1"].font = Font(bold=True, size=14, color="FF6600")
+    ins.column_dimensions["A"].width = 120
+
+    cab_fill, cab_font = PatternFill("solid", fgColor="FF6600"), Font(bold=True, color="FFFFFF")
+
+    def hoja(titulo, filas):
+        ws = wb.create_sheet(titulo)
+        ws.append([h for _k, h, _w in COLS_USUARIOS])
+        for i, (_k, _h, w) in enumerate(COLS_USUARIOS, start=1):
+            ws.cell(1, i).fill, ws.cell(1, i).font = cab_fill, cab_font
+            ws.cell(1, i).alignment = Alignment(wrap_text=True, vertical="center")
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+        ws.row_dimensions[1].height = 32
+        ws.freeze_panes = "A2"
+        for f in filas:
+            ws.append(f)
+        dv_rol = DataValidation(type="list", formula1='"RESPONSABLE,CONSULTA,ADMIN"', allow_blank=True)
+        dv_act = DataValidation(type="list", formula1='"Sí,No"', allow_blank=True)
+        ws.add_data_validation(dv_rol)
+        ws.add_data_validation(dv_act)
+        dv_rol.add("D2:D2000")
+        dv_act.add("G2:G2000")
+        return ws
+
+    asign: dict[int, list[str]] = {}
+    for r in db().query("SELECT uu.usuario_id, u.codigo_area FROM usuario_unidades uu "
+                        "JOIN unidades_organicas u ON u.id = uu.unidad_id ORDER BY u.codigo_area"):
+        asign.setdefault(r["usuario_id"], []).append(r["codigo_area"])
+    existentes = db().query("SELECT * FROM usuarios ORDER BY usuario")
+    hoja("Usuarios", [[u["usuario"], u["nombre"], u["correo"], u["rol"], ", ".join(asign.get(u["id"], [])), "",
+                       "Sí" if u["activo"] else "No"] for u in existentes])
+    ya = {u["usuario"] for u in existentes} | {s(u["correo"]).lower() for u in existentes}
+    sugeridos: dict[str, list] = {}
+    for un in c.unidades():
+        correo = s(un.get("correo")).lower()
+        if "@" not in correo or correo in ya:
+            continue
+        usuario_s = normalizar_usuario(correo.split("@")[0])
+        if usuario_s in ya:
+            continue
+        fila = sugeridos.setdefault(usuario_s, [usuario_s, s(un.get("responsable")), correo, "RESPONSABLE", [], "", "Sí"])
+        fila[4].append(un["codigo_area"])
+    ws_s = hoja("Sugeridos", [f[:4] + [", ".join(f[4])] + f[5:] for f in sugeridos.values()])
+    if not sugeridos:
+        ws_s["A2"] = ("Sin sugerencias: registre «Responsable» y «Correo electrónico» de cada unidad (Unidades y techos o "
+                      "plantilla de parámetros) para que el sistema proponga los usuarios.")
+        ws_s["A2"].font = Font(italic=True, color="6B6B6B")
+    wu = wb.create_sheet("Unidades")
+    wu.append(["Código de área", "Unidad (código - centro de costo - unidad orgánica)", "Macrogrupo"])
+    for i in (1, 2, 3):
+        wu.cell(1, i).fill, wu.cell(1, i).font = cab_fill, cab_font
+    for un in c.unidades():
+        wu.append([un["codigo_area"], c.unidad_display(un), un.get("macrogrupo")])
+    wu.column_dimensions["A"].width, wu.column_dimensions["B"].width, wu.column_dimensions["C"].width = 16, 90, 34
+    wb.active = 1
+    wb.save(path)
+
+
+def _importar_usuarios(path: Path) -> dict:
+    import openpyxl
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    if "Usuarios" not in wb.sheetnames:
+        raise ValueError("El archivo no contiene la hoja «Usuarios». Descargue la plantilla de usuarios del sistema.")
+    filas = list(wb["Usuarios"].iter_rows(values_only=True))
+    wb.close()
+    codigos = {s(u["codigo_area"]).upper(): u["id"] for u in ctrl().unidades()}
+    rep: dict[str, Any] = {"Usuarios creados": 0, "Usuarios actualizados": 0, "avisos": [], "credenciales": []}
+    for n, fila in enumerate(filas[1:], start=2):
+        fila = list(fila) + [None] * (len(COLS_USUARIOS) - len(fila))
+        d = {k: fila[i] for i, (k, _h, _w) in enumerate(COLS_USUARIOS)}
+        if not any(s(v) for v in d.values()):
+            continue
+        nombre_u = normalizar_usuario(d["usuario"])
+        uids, faltan = [], []
+        for cod in re.split(r"[,;\n]+", _codigo_texto(d["unidades"])):
+            cod = cod.strip().upper()
+            if cod:
+                (uids.append(codigos[cod]) if cod in codigos else faltan.append(cod))
+        if faltan:
+            rep["avisos"].append(f"Fila {n} ({nombre_u}): códigos de área inexistentes: {', '.join(faltan)}.")
+        rol = s(d["rol"]).upper() or "RESPONSABLE"
+        if rol not in ROLES:
+            rep["avisos"].append(f"Fila {n} ({nombre_u}): rol «{d['rol']}» no válido; se omitió la fila.")
+            continue
+        existente = db().query_one("SELECT id FROM usuarios WHERE usuario=?", (nombre_u,))
+        clave = s(d["clave"])
+        if isinstance(d["clave"], float) and d["clave"].is_integer():
+            clave = str(int(d["clave"]))
+        datos = {"usuario": nombre_u, "nombre": d["nombre"], "correo": d["correo"], "rol": rol,
+                 "activo": 0 if s(d["activo"]).lower() in ("no", "0", "n") else 1,
+                 "debe_cambiar_clave": 1, "nueva_clave": clave, "unidades": [str(x) for x in uids]}
+        if existente and not clave:
+            datos["debe_cambiar_clave"] = db().scalar("SELECT debe_cambiar_clave FROM usuarios WHERE id=?",
+                                                      (existente["id"],))
+        g.pop("clave_temporal", None)
+        try:
+            _guardar_usuario(datos, existente["id"] if existente else None)
+        except ValueError as e:
+            rep["avisos"].append(f"Fila {n} ({nombre_u or 'sin usuario'}): {e}")
+            continue
+        rep["Usuarios actualizados" if existente else "Usuarios creados"] += 1
+        if rol == "RESPONSABLE" and not uids:
+            rep["avisos"].append(f"Fila {n} ({nombre_u}): responsable sin unidades asignadas.")
+        if clave or g.get("clave_temporal"):
+            rep["credenciales"].append({"usuario": nombre_u, "nombre": s(d["nombre"]), "correo": s(d["correo"]),
+                                        "clave": clave or g.clave_temporal})
+    g.pop("clave_temporal", None)
+    return rep
 
 
 def _admin_delete(entidad: str, rid: int) -> None:

@@ -144,7 +144,33 @@
       this.el.addEventListener("input", (e) => this.cambio(e));
       this.el.addEventListener("change", (e) => this.cambio(e));
       this.el.addEventListener("click", (e) => this.clicMeses(e));
+      this.el.addEventListener("change", (e) => {
+        const cb = e.target.closest(".multi-lista input[type=checkbox]"); if (!cb) return;
+        const caja = cb.closest(".multi"), sel = this.input(caja.dataset.multi);
+        const op = Array.from(sel.options).find((o) => o.value === cb.value); if (op) op.selected = cb.checked;
+        this.contarMulti(caja);
+      });
+      this.el.addEventListener("input", (e) => { if (e.target.matches(".multi-buscar")) this.pintarMulti(e.target.closest(".multi")); });
+      this.el.addEventListener("click", (e) => {
+        if (!e.target.matches("[data-multi-limpiar]")) return;
+        const caja = e.target.closest(".multi");
+        Array.from(this.input(caja.dataset.multi).options).forEach((o) => (o.selected = false));
+        this.pintarMulti(caja);
+      });
       this.refrescarOpciones();
+    }
+    pintarMulti(caja) {
+      const sel = this.input(caja.dataset.multi), q = $(".multi-buscar", caja).value.trim().toLowerCase();
+      const ops = Array.from(sel.options).filter((o) => !q || o.textContent.toLowerCase().includes(q))
+        .sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0));  // las elegidas primero
+      $(".multi-lista", caja).innerHTML = ops.length ? ops.map((o) => `<label class="${o.selected ? "elegida" : ""}"><input type="checkbox" value="${esc(o.value)}" ${o.selected ? "checked" : ""}><span>${esc(o.textContent)}</span></label>`).join("")
+        : '<p class="nota">Sin coincidencias.</p>';
+      this.contarMulti(caja);
+    }
+    contarMulti(caja) {
+      const n = this.input(caja.dataset.multi).selectedOptions.length;
+      $(".multi-cuenta", caja).textContent = n === 1 ? "1 unidad seleccionada" : `${n} unidades seleccionadas`;
+      caja.querySelectorAll(".multi-lista label").forEach((l) => l.classList.toggle("elegida", l.querySelector("input").checked));
     }
     html(f) {
       const id = "f_" + f.key + "_" + Math.random().toString(36).slice(2, 7);
@@ -155,7 +181,11 @@
         case "select":
           if (f.search || f.free) return `<div class="${cls}">${lab}<div class="combo"><input id="${id}" name="${f.key}" list="${id}_l" autocomplete="off"><datalist id="${id}_l"></datalist>${f.search ? `<button type="button" class="btn-mini" data-buscar="${f.key}" title="Buscar">🔍</button>` : ""}</div></div>`;
           return `<div class="${cls}">${lab}<select id="${id}" name="${f.key}"></select></div>`;
-        case "multiselect": return `<div class="${cls}">${lab}<select id="${id}" name="${f.key}" multiple size="8"></select><small class="nota">Ctrl/Cmd + clic para varias.</small></div>`;
+        case "multiselect": return `<div class="${cls}">${lab}<div class="multi" data-multi="${f.key}">
+          <input type="search" class="multi-buscar" placeholder="Buscar por código, centro de costo o unidad…" autocomplete="off">
+          <div class="multi-lista"></div>
+          <div class="multi-pie"><span class="multi-cuenta"></span><button type="button" class="btn-mini" data-multi-limpiar>Quitar todas</button></div>
+        </div><select id="${id}" name="${f.key}" multiple hidden></select></div>`;
         case "calc": return `<div class="${cls}"><span class="lbl">${esc(f.label)}</span><output data-calc="${f.key}"></output></div>`;
         case "check": return `<div class="${cls} campo-check"><label><input type="checkbox" name="${f.key}"> ${esc(f.label)}</label></div>`;
         case "password": return `<div class="${cls}">${lab}<input id="${id}" name="${f.key}" type="password" autocomplete="new-password"></div>`;
@@ -198,6 +228,7 @@
         } else if (f.type === "multiselect") {
           const actuales = new Set(Array.from(el.selectedOptions).map((o) => o.value));
           el.innerHTML = ops.map((o) => `<option value="${esc(o.value)}" ${actuales.has(String(o.value)) ? "selected" : ""}>${esc(o.label)}</option>`).join("");
+          const caja = el.parentElement.querySelector(".multi"); if (caja) this.pintarMulti(caja);
         } else {
           const actual = el.value;
           el.innerHTML = '<option value=""></option>' + ops.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
@@ -234,7 +265,10 @@
         const el = this.input(f.key);
         if (!el) continue;
         if (f.type === "check") el.checked = v === 1 || v === true || v === "1";
-        else if (f.type === "multiselect") Array.from(el.options).forEach((o) => { o.selected = (v || []).map(String).includes(o.value); });
+        else if (f.type === "multiselect") {
+          Array.from(el.options).forEach((o) => { o.selected = (v || []).map(String).includes(o.value); });
+          const caja = el.parentElement.querySelector(".multi"); if (caja) { $(".multi-buscar", caja).value = ""; this.pintarMulti(caja); }
+        }
         else if (f.type === "pct") el.value = v === null || v === undefined || v === "" ? "" : (Number(v) * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
         else el.value = v ?? "";
         if (f.type === "color") { const c = this.el.querySelector(`[data-color="${f.key}"]`); if (c && /^#[0-9a-f]{6}$/i.test(v)) c.value = v; }
@@ -621,6 +655,10 @@
         if (a.dataset.accion === "a-guardar") {
           const r = await POA.api(rid ? "PUT" : "POST", rid ? urlId(rid) : url(), form.get());
           POA.toast("Guardado."); await POA.listas(true); form.refrescarOpciones(); await recargar(r.id);
+          if (r.aviso) POA.toast(r.aviso, "aviso");
+          if (r.clave_temporal) POA.modal("Usuario creado", `<p>Entregue estos datos a la persona por un canal seguro. Deberá cambiar la clave en su primer ingreso.</p>
+            <table class="tabla"><tr><th>Usuario</th><td><strong>${esc(r.usuario)}</strong></td></tr><tr><th>Clave temporal</th><td><code class="clave">${esc(r.clave_temporal)}</code></td></tr></table>
+            <p class="nota">Esta clave no se volverá a mostrar.</p><button class="btn btn-primario" data-cerrar>Aceptar</button>`);
         }
         if (a.dataset.accion === "a-eliminar" && rid && POA.confirmar("¿Eliminar el registro seleccionado?")) {
           await POA.api("DELETE", urlId(rid)); POA.toast("Eliminado."); await recargar();
@@ -676,8 +714,18 @@
     try {
       const rep = await POA.api("POST", f.dataset.carga, new FormData(f));
       const avisos = rep.avisos || [];
-      const txt = Object.entries(rep).filter(([k]) => k !== "avisos").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
-      POA.modal("Carga completada", `<pre>${esc(txt)}</pre>${avisos.length ? "<h4>Avisos</h4><ul>" + avisos.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join("") + "</ul>" : ""}<button class="btn btn-primario" onclick="location.reload()">Aceptar</button>`);
+      const txt = Object.entries(rep).filter(([k]) => !["avisos", "credenciales"].includes(k)).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+      const cred = rep.credenciales || [];
+      const tablaCred = cred.length ? `<h4>Claves temporales (${cred.length})</h4><p class="nota">Descárguelas ahora: no se volverán a mostrar.</p>
+        <div class="tabla-scroll alto-bajo"><table class="tabla"><tr><th>Usuario</th><th>Nombre</th><th>Clave temporal</th></tr>${cred.map((c) => `<tr><td>${esc(c.usuario)}</td><td>${esc(c.nombre)}</td><td><code>${esc(c.clave)}</code></td></tr>`).join("")}</table></div>
+        <button class="btn" id="btn-cred">⬇ Descargar claves (.csv)</button> ` : "";
+      POA.modal("Carga completada", `<pre>${esc(txt)}</pre>${tablaCred}${avisos.length ? "<h4>Avisos</h4><ul>" + avisos.slice(0, 50).map((a) => `<li>${esc(a)}</li>`).join("") + "</ul>" : ""}<button class="btn btn-primario" onclick="location.reload()">Aceptar</button>`);
+      if (cred.length) $("#btn-cred").onclick = () => {
+        const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const csv = "\ufeffUsuario;Nombre;Correo;Clave temporal\r\n" + cred.map((c) => [c.usuario, c.nombre, c.correo, c.clave].map(q).join(";")).join("\r\n");
+        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        a.download = "Claves_temporales_POA_DPDI.csv"; a.click(); URL.revokeObjectURL(a.href);
+      };
     } catch (err) { /* el mensaje de error ya se mostró */ } finally {
       if (boton) { boton.disabled = false; boton.textContent = texto; }
     }

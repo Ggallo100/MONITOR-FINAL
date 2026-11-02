@@ -182,11 +182,24 @@
 <figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 7.</b> Usuarios y accesos.</figcaption></figure>
 <h2>Crear un usuario</h2>
 <ol class="pasos">
-  <li>Pulse <b>Nuevo</b> y escriba el <b>usuario</b> (se recomienda el usuario de correo institucional, por ejemplo <code>ana.alva</code>), nombre completo y correo.</li>
+  <li>Pulse <b>Nuevo</b> y escriba el <b>usuario</b> (se recomienda el usuario del correo institucional, por ejemplo <code>ana.alva</code>;
+    si escribe «Ana Alva» el sistema lo convierte en <code>ana.alva</code>), el nombre completo y el correo.</li>
   <li>Elija el <b>rol</b>: Responsable de unidad orgánica, Consulta DPDI (solo lectura) o Administrador DPDI.</li>
-  <li>Para responsables, marque las <b>unidades asignadas</b> (puede asignar varias; el buscador ayuda a encontrarlas).</li>
-  <li>Escriba una <b>clave temporal</b> (mínimo 8 caracteres, con letras y números) y deje marcado <b>Debe cambiar la clave al ingresar</b>.</li>
-  <li>Pulse <b>Guardar</b> y comunique el usuario y la clave temporal por un canal seguro (no en el mismo correo que la dirección del sistema, si es posible).</li>
+  <li>Para responsables, en <b>Unidades asignadas</b> escriba parte del código, centro de costo o nombre en el buscador y marque las casillas
+    de las unidades. Las marcadas aparecen primero y el pie indica cuántas lleva; «Quitar todas» limpia la selección.</li>
+  <li>Deje <b>Nueva clave</b> vacía para que el sistema genere una <b>clave temporal</b>, o escriba una (mínimo 8 caracteres, con letras y números).</li>
+  <li>Pulse <b>Guardar</b> (los botones quedan siempre visibles al pie del formulario). Si la clave fue generada, se muestra una sola vez:
+    entréguela por un canal seguro. La persona deberá cambiarla en su primer ingreso.</li>
+</ol>
+<h2>Carga masiva de usuarios</h2>
+<p>Para crear muchos usuarios a la vez use la tarjeta <b>Carga masiva de usuarios</b> de la misma página:</p>
+<ol class="pasos">
+  <li><b>Descargar plantilla de usuarios (.xlsx)</b>. Contiene las hojas <code>Usuarios</code> (los actuales), <code>Sugeridos</code> (propuestas a partir
+    del responsable y correo registrados en cada unidad), <code>Unidades</code> (códigos de área) e <code>Instrucciones</code>.</li>
+  <li>Complete la hoja <code>Usuarios</code>: usuario, nombre, correo, rol, <b>códigos de área separados por coma</b>, clave temporal (opcional) y activo.</li>
+  <li>Pulse <b>Importar usuarios</b>. El sistema crea los nuevos, actualiza los existentes y muestra los avisos (rol no válido, códigos inexistentes,
+    responsables sin unidades).</li>
+  <li>Descargue la lista de <b>claves temporales</b> (.csv) desde la ventana de resultado: no se vuelve a mostrar.</li>
 </ol>
 <h2>Tareas frecuentes</h2>
 <table class="libre">

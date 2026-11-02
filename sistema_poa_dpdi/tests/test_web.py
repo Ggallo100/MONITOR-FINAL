@@ -193,6 +193,48 @@ class WebTest(unittest.TestCase):
                   "nueva_clave": "Nueva2027b", "unidades": [str(unidades[0]["id"])]})
         self.cliente("rosa.paz", "Nueva2027b")
 
+    def test_usuario_con_clave_temporal_y_nombre_normalizado(self):
+        unidades = self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]
+        r = self.api(self.admin, "POST", "/api/admin/t/usuarios",
+                     {"usuario": "Pedro Ruíz", "nombre": "Pedro Ruiz", "rol": "RESPONSABLE", "activo": 1,
+                      "debe_cambiar_clave": 0, "nueva_clave": "", "unidades": [str(unidades[0]["id"])]})
+        self.assertEqual(r["usuario"], "pedro.ruiz")
+        self.assertNotIn("aviso", r)
+        c = self.app.test_client()
+        c.post("/login", data={"usuario": "pedro.ruiz", "clave": r["clave_temporal"], "csrf_token": self.token(c, "/login")})
+        self.assertIn("cambiar-clave", c.get("/").headers.get("Location", ""))  # debe cambiarla
+        r = self.api(self.admin, "POST", "/api/admin/t/usuarios", {"usuario": "sin.unidad", "rol": "RESPONSABLE",
+                                                                    "activo": 1, "unidades": []})
+        self.assertIn("aviso", r)
+
+    def test_carga_masiva_de_usuarios(self):
+        import openpyxl
+        plantilla = self.admin.get("/descargas/plantilla-usuarios").data
+        wb = openpyxl.load_workbook(io.BytesIO(plantilla))
+        self.assertEqual(wb.sheetnames, ["Instrucciones", "Usuarios", "Sugeridos", "Unidades"])
+        ws = wb["Usuarios"]
+        self.assertEqual(ws.cell(2, 1).value, "admin")
+        codigos = [r[0] for r in wb["Unidades"].iter_rows(min_row=2, values_only=True)]
+        ws.append(["carla.diaz", "Carla Díaz", "carla@uni.pe", "RESPONSABLE", f"{codigos[0]}, {codigos[1]}", "", "Sí"])
+        ws.append(["Luis Soto", "Luis Soto", "", "CONSULTA", "", "Consulta2027", "Sí"])
+        ws.append(["mal.rol", "X", "", "JEFE", "", "", "Sí"])
+        ws.append(["eva.paz", "Eva", "", "RESPONSABLE", "NOEXISTE", "", "Sí"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        rep = self.api(self.admin, "POST", "/cargas/usuarios", data={"archivo": (io.BytesIO(buf.getvalue()), "u.xlsx")},
+                       content_type="multipart/form-data")
+        self.assertEqual((rep["Usuarios creados"], rep["Usuarios actualizados"]), (3, 1))
+        self.assertEqual({c["usuario"] for c in rep["credenciales"]}, {"carla.diaz", "luis.soto", "eva.paz"})
+        self.assertTrue(any("JEFE" in a for a in rep["avisos"]))
+        self.assertTrue(any("NOEXISTE" in a for a in rep["avisos"]))
+        usuarios = {u["usuario"]: u for u in self.api(self.admin, "GET", "/api/admin/t/usuarios")["rows"]}
+        self.assertEqual(len(usuarios["carla.diaz"]["unidades"]), 2)
+        clave = next(c["clave"] for c in rep["credenciales"] if c["usuario"] == "carla.diaz")
+        c = self.app.test_client()
+        r = c.post("/login", data={"usuario": "carla.diaz", "clave": clave, "csrf_token": self.token(c, "/login")})
+        self.assertEqual(r.status_code, 302)
+        self.cliente("admin", "Dpdi2027ok")  # el administrador conserva su clave (fila sin clave)
+
     def test_importar_parametros_reconoce_el_archivo(self):
         plantilla = self.admin.get("/descargas/plantilla-parametros").data
         libro = self.admin.get("/descargas/libro").data

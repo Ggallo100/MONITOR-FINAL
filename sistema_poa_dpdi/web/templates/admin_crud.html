@@ -5,6 +5,23 @@
 {% if entidad == 'cuentas' %}
 <form class="tarjeta fila-form" data-carga="/cargas/niif"><strong>Carga masiva NIIF (.xlsx / .csv)</strong><input type="file" name="archivo" accept=".xlsx,.csv" required><button class="btn">Cargar</button></form>
 {% endif %}
+{% if entidad == 'usuarios' %}
+<section class="tarjeta">
+  <h2>Carga masiva de usuarios</h2>
+  <div class="pasos-carga">
+    <div class="paso-carga">
+      <strong>1. Descargar plantilla</strong>
+      <p class="nota">Incluye los usuarios actuales, usuarios sugeridos a partir del responsable y correo de cada unidad, y la lista de códigos de área.</p>
+      <a class="btn btn-primario" href="{{ url_for('desc_plantilla_usuarios') }}">⬇ Descargar plantilla de usuarios (.xlsx)</a>
+    </div>
+    <div class="paso-carga">
+      <strong>2. Importar usuarios</strong>
+      <p class="nota">Crea los nuevos y actualiza los existentes. Si no indica clave, el sistema genera una temporal y le permite descargar la lista.</p>
+      <form class="fila-form" data-carga="/cargas/usuarios"><input type="file" name="archivo" accept=".xlsx" required><button class="btn btn-primario">⬆ Importar usuarios</button></form>
+    </div>
+  </div>
+</section>
+{% endif %}
 {% if cfg.filtro %}
 <div class="tarjeta fila-form"><strong>Catálogo:</strong><select id="filtro">{% for o in cfg.filtro.options %}<option value="{{ o.value }}">{{ o.label }}</option>{% endfor %}</select></div>
 {% endif %}
