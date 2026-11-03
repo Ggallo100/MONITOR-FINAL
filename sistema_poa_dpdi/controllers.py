@@ -48,7 +48,13 @@ CATALOGOS_ESTRATEGICOS = {
     "SUSTENTO_ING": "Sustento de ingresos", "CAT_OO": "Categoría de otras operativas",
     "TIPO_AP": "Tipo de actividad propia", "TIPO_INV": "Tipo de inversión",
     "TIPO_ACTIVIDAD": "Clasificación de actividades",
+    "ACT_COM": "Tipo de actividad comercial (Marketing)",
 }
+
+
+def es_marketing(unidad: Optional[dict]) -> bool:
+    """Unidades del macrogrupo Marketing: usan el combo «Tipo de Actividad Comercial» en Otras operativas."""
+    return bool(unidad) and "MARKETING" in norm_key(unidad.get("macrogrupo")).upper()
 
 # Datos generales y supuestos (clave, etiqueta, descripción)
 PARAM_GENERALES = [
@@ -717,6 +723,20 @@ class POAController:
                                       if tarifa_neta and tarifa_neta > 0 and r["_egresos"] > 0 else None)
             r["_estado"] = estado_autofin(r["_ingresos"], r["_egresos"])
 
+    def actividades_comerciales(self) -> list[str]:
+        return self.catalogo_values("ACT_COM")
+
+    def actividad_comercial_valida(self, uid: int, valor: Any) -> str:
+        """Solo las unidades de Marketing guardan el tipo de actividad comercial, y debe existir en el catálogo."""
+        v = s(valor)
+        if not v or not es_marketing(self.unidad(uid)):
+            return ""
+        for opcion in self.actividades_comerciales():
+            if norm_key(opcion) == norm_key(v):
+                return opcion
+        raise ValueError(f"«{v}» no es un Tipo de Actividad Comercial válido. Revise el mantenedor "
+                         "Administración → Tipos de actividad comercial.")
+
     def save_master(self, kind: str, uid: int, data: dict, mid: Optional[int] = None) -> int:
         table = MASTER_TABLE[kind]
         data = dict(data)
@@ -748,6 +768,7 @@ class POAController:
             data["prioridad"] = int(pr) if pr else None
         elif kind == "OO":
             data["categoria"] = split_display(data.get("categoria", ""))
+            data["actividad_comercial"] = self.actividad_comercial_valida(uid, data.get("actividad_comercial"))
         elif kind == "AP":
             data["participantes"] = to_float(data.get("participantes"))
             data["tarifa"] = to_float(data.get("tarifa"))
@@ -1130,6 +1151,28 @@ class POAController:
                      "% del total costos", "Resultado (S/)"],
             formats=["text", "money", "pct", "money", "pct", "money"], rows=s6, totals={len(s6) - 1}))
 
+        # ---------------- 6.1 Solo Marketing: otras operativas por tipo de actividad comercial
+        if es_marketing(u):
+            s6m = []
+            tipos = self.actividades_comerciales()
+            tipos += sorted({m["actividad_comercial"] for m in oo if m.get("actividad_comercial")} - set(tipos))
+            for tipo in tipos + [""]:
+                ms = [m for m in oo if s(m["nombre"]) and (m.get("actividad_comercial") or "") == tipo]
+                if not ms and tipo == "":
+                    continue
+                s6m.append([tipo or "Sin tipo de actividad comercial", len(ms), sum(m["_ingresos"] for m in ms),
+                            sum(m["_egresos"] for m in ms), None, None])
+            te = sum(r[3] for r in s6m)
+            for r in s6m:
+                r[4], r[5] = safe_div(r[3], te), r[2] - r[3]
+            s6m.append(["Total", sum(r[1] for r in s6m), sum(r[2] for r in s6m), te, 1.0 if te else None,
+                        sum(r[2] for r in s6m) - te])
+            out["sections"].append(dict(
+                key="s6m", title="6.1 Otras actividades operativas por tipo de actividad comercial (Marketing)",
+                headers=["Tipo de actividad comercial", "N° de actividades", "Ingresos (S/)", "Costo total (S/)",
+                         "% del total costos", "Resultado (S/)"],
+                formats=["text", "int", "money", "money", "pct", "money"], rows=s6m, totals={len(s6m) - 1}))
+
         # ---------------- 7. Actividades propias por tipo
         s7 = []
         for t in self.db.catalogo("TIPO_AP"):
@@ -1399,7 +1442,7 @@ class POAController:
     # BASE DE DATOS CONSOLIDADA NIIF (1 fila por registro mensualizado)
     # ====================================================================
     BD_COLUMNS = ["Anio", "Codigo_Area", "Macrogrupo", "Unidad_Organica", "Centro_Costo", "Tipo_Actividad_POA",
-                  "Codigo_Actividad", "Nombre_Actividad", "Eje_Estrategico", "OE_PEI", "AE_PEI", "OBJ_POA",
+                  "Codigo_Actividad", "Nombre_Actividad", "Tipo_Actividad_Comercial", "Eje_Estrategico", "OE_PEI", "AE_PEI", "OBJ_POA",
                   "Prioridad", "Tipo_Flujo", "Codigo_NIIF", "Partida_Rubro", "Partida_GG", "Categoria_Presupuestal",
                   "Descripcion_Item", "Moneda_Origen", "Cantidad", "Costo_Unitario_Soles", "Mes", "Mes_Numero",
                   "Monto_Mensual_Soles", "Sustento", "Responsable", "Estado_Directrices"]
@@ -1420,7 +1463,7 @@ class POAController:
                 return "Cumple" if not codes else "Revisar: " + ", ".join(sorted(codes))
 
             def emit(tipo_act, codigo, nombre, tipo_flujo, partida, partida_gg, categoria, desc, moneda, cant, cu_s,
-                     meses, sustento, responsable, est, eje="", oe="", ae="", obj="", prioridad=None):
+                     meses, sustento, responsable, est, eje="", oe="", ae="", obj="", prioridad=None, act_com=""):
                 cat = (self.gg_info(partida, tipo_flujo) if partida_gg else None) or \
                     self.buscar_partida(partida, [tipo_flujo, "Egresos", "Ingresos", "Inversion"])
                 for i, monto in enumerate(meses):
@@ -1430,7 +1473,7 @@ class POAController:
                         "Anio": anio, "Codigo_Area": area, "Macrogrupo": u["macrogrupo"],
                         "Unidad_Organica": u["nombre_unidad"], "Centro_Costo": u["centro_costo"],
                         "Tipo_Actividad_POA": tipo_act, "Codigo_Actividad": f"{area}-{codigo}",
-                        "Nombre_Actividad": nombre, "Eje_Estrategico": eje, "OE_PEI": oe, "AE_PEI": ae, "OBJ_POA": obj,
+                        "Nombre_Actividad": nombre, "Tipo_Actividad_Comercial": act_com, "Eje_Estrategico": eje, "OE_PEI": oe, "AE_PEI": ae, "OBJ_POA": obj,
                         "Prioridad": prioridad, "Tipo_Flujo": tipo_flujo,
                         "Codigo_NIIF": cat["codigo_niif"] if cat else "",
                         "Partida_Rubro": cat["partida_rubro"] if cat else partida,
@@ -1466,7 +1509,8 @@ class POAController:
                              dd["categoria"], dd["descripcion"], dd["moneda"], to_float(dd["cantidad"]),
                              dd["_c"]["costo_unit_soles"], dd["_c"]["meses"], dd["sustento"], m.get("responsable", ""),
                              estado((kind, m["id"]), (f"{kind}-D", dd["id"])),
-                             prioridad=m.get("prioridad") if kind == "INV" else None)
+                             prioridad=m.get("prioridad") if kind == "INV" else None,
+                             act_com=m.get("actividad_comercial") or "" if kind == "OO" else "")
         return out
 
     # ====================================================================
@@ -1640,7 +1684,14 @@ class POAController:
             elif kind == "OO":
                 data = dict(codigo=code, categoria=s(g(r, "Categoría")), nombre=s(g(r, "Nombre de la actividad")),
                             descripcion=s(g(r, "Descripción y justificación")), responsable=s(g(r, "Responsable")),
-                            observaciones=s(g(r, "Observaciones")))
+                            observaciones=s(g(r, "Observaciones")),
+                            actividad_comercial=s(g(r, "Tipo de actividad comercial (solo Marketing)",
+                                                    "Tipo de actividad comercial")))
+                try:
+                    data["actividad_comercial"] = self.actividad_comercial_valida(uid, data["actividad_comercial"])
+                except ValueError as e:
+                    report["avisos"].append(f"{sh_m} {code}: {e} Se dejó vacío.")
+                    data["actividad_comercial"] = ""
                 keep = bool(data["nombre"])
             elif kind == "AP":
                 data = dict(codigo=code, tipo=s(g(r, "Tipo")), nombre=s(g(r, "Nombre de la actividad")),

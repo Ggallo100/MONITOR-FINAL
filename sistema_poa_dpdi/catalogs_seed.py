@@ -688,6 +688,26 @@ def _migrar_bd_existente(db) -> None:
     db.set_meta("version_catalogos", "2")
 
 
+# Tipo de actividad comercial: combo del Registro Maestro de «Otras operativas» de las unidades del macrogrupo
+# Marketing. Se siembra una sola vez; luego la DPDI lo mantiene en Administración → Tipos de actividad comercial.
+ACTIVIDADES_COMERCIALES = [
+    "ATL", "BRANDING", "BTL", "CAMPAÑAS", "EVENTOS", "INVESTIGACIÓN", "LICENCIAS", "PRODUCCIÓN", "SERVICIOS",
+    "VENTAS AREQUIPA", "VENTAS JULIACA", "VENTAS AYACUCHO", "VENTAS CUZCO", "VENTAS CAJAMARCA",
+    "VENTAS EDUCACIÓN CONTINUA", "VENTAS MAESTRÍAS", "VENTAS PREGRADO", "VENTAS SEGUNDAS ESPECIALIDADES",
+]
+
+
+def _sembrar_actividades_comerciales(db) -> None:
+    if db.meta("actividades_comerciales") == "1":
+        return
+    if not db.scalar("SELECT COUNT(*) FROM catalogos_estrategicos WHERE tipo_catalogo='ACT_COM'"):
+        db.conn.executemany(
+            "INSERT OR IGNORE INTO catalogos_estrategicos (tipo_catalogo, codigo, descripcion, padre, eje, extra, orden) "
+            "VALUES ('ACT_COM', ?, ?, '', '', '', ?)", [(x, x, i) for i, x in enumerate(ACTIVIDADES_COMERCIALES)])
+        db.conn.commit()
+    db.set_meta("actividades_comerciales", "1")
+
+
 def seed_database(db) -> None:
     """Pre-puebla (idempotente) catálogos, parámetros y unidades iniciales."""
     conn = db.conn
@@ -739,3 +759,4 @@ def seed_database(db) -> None:
         )
     conn.commit()
     _migrar_bd_existente(db)
+    _sembrar_actividades_comerciales(db)

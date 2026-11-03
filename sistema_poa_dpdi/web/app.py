@@ -27,14 +27,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.3"
+VERSION_APP = "2.5"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
 from controllers import (DETAIL_TABLE, FLAT_TABLE, MASTER_TABLE, POAController, calc_detalle, calc_fegr,  # noqa: E402
-                         calc_fing, code_display, control_meta, fmt_money, parse_pct, s, to_float)
+                         calc_fing, code_display, control_meta, es_marketing, fmt_money, parse_pct, s, to_float)
 from database import MCOLS, MESES, Database  # noqa: E402
 from exporter import (export_bd_consolidada, export_libro_oficial, export_pdf,  # noqa: E402
                       export_plantilla_parametros)
@@ -527,7 +527,7 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         kind = SLUG_KIND.get(slug)
         if not kind:
             abort(404)
-        cfg = schemas.MASTER[kind]
+        cfg = schemas.master_para_unidad(kind, ctrl().unidad(unidad_actual()) if unidad_actual() else None)
         return render_template("maestro_detalle.html", pagina=slug, kind=kind, cfg=cfg,
                                detalle_fields=schemas.DETALLE_FIELDS, detalle_columns=schemas.DETALLE_COLUMNS)
 
@@ -606,7 +606,7 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
             oes=cat("OE"), objs=objs, obj_oe=obj_oe, origenes=plano("ORIGEN"), prioridades=cat("PRIORIDAD"),
             cat_oo=[{"value": x["descripcion"], "label": f"{x['codigo']} · {x['descripcion']}"}
                     for x in dbx.catalogo("CAT_OO")],
-            tipos_ap=plano("TIPO_AP"), tipos_inv=plano("TIPO_INV"), gg=gg, gg_desc=desc,
+            tipos_ap=plano("TIPO_AP"), tipos_inv=plano("TIPO_INV"), gg=gg, gg_desc=desc, act_comercial=plano("ACT_COM"),
             sustento={"Ingresos": sust_ing, "Egresos": sust_egr, "Inversion": sust_egr},
             sustento_ing=sust_ing, sustento_egr=sust_egr,
             sustento_todos=sust_egr + [x for x in sust_ing if x not in sust_egr],
@@ -727,6 +727,8 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         data = {k: v for k, v in (request.get_json(force=True) or {}).items() if not k.startswith("_")}
         if kind == "INI" and not s(data.get("nombre")):
             raise ValueError("Registre el nombre de la iniciativa.")
+        if kind == "OO" and es_marketing(ctrl().unidad(uid)) and not s(data.get("actividad_comercial")):
+            raise ValueError("Seleccione el Tipo de Actividad Comercial (obligatorio para las unidades de Marketing).")
         new_id = ctrl().save_master(kind, uid, data, mid)
         log(f"Guardar {kind}", s(data.get("codigo")))
         return jsonify(id=new_id, row=_fila_master(kind, ctrl().get_master(kind, new_id)))
@@ -1172,6 +1174,14 @@ def _admin_rows(entidad: str) -> list[dict]:
         return db().catalogo(request.args.get("tipo", "EJE"))
     if entidad == "costos":
         return db().all("costos_referencia", order="id")
+    if entidad == "act_comercial":
+        uso = {r["actividad_comercial"]: r["n"] for r in db().query(
+            "SELECT actividad_comercial, COUNT(*) AS n FROM otras_operativas WHERE actividad_comercial<>'' "
+            "GROUP BY actividad_comercial")}
+        rows = db().catalogo("ACT_COM")
+        for r in rows:
+            r["_uso"] = uso.get(r["codigo"], 0)
+        return rows
     if entidad == "plantilla":
         areas = {u["id"]: u["codigo_area"] for u in c.unidades()}
         rows = db().all("plantilla_funcionamiento", order="unidad_id IS NOT NULL, unidad_id, orden, id")
@@ -1209,7 +1219,11 @@ def _admin_save(entidad: str, d: dict, rid: Optional[int]) -> int:
             data["eje"], data["padre"] = code_display(s(data["eje"])), code_display(s(data["padre"]))
         else:
             data["eje"], data["padre"] = "", ""
+        if tipo == "ACT_COM":
+            return _guardar_act_comercial(data, rid)
         return c.save_catalogo(tipo, data, rid)
+    if entidad == "act_comercial":
+        return _guardar_act_comercial(d, rid)
     if entidad == "costos":
         if not s(d.get("concepto")):
             raise ValueError("El concepto es obligatorio.")
@@ -1427,6 +1441,29 @@ def _importar_usuarios(path: Path) -> dict:
     return rep
 
 
+def _guardar_act_comercial(d: dict, rid: Optional[int]) -> int:
+    """Tipo de actividad comercial (catálogo ACT_COM). Renombrar actualiza las actividades que ya lo usan."""
+    codigo = re.sub(r"\s+", " ", s(d.get("codigo"))).upper()
+    if not codigo:
+        raise ValueError("Escriba el tipo de actividad comercial.")
+    otro = db().query_one("SELECT id FROM catalogos_estrategicos WHERE tipo_catalogo='ACT_COM' AND codigo=?", (codigo,))
+    if otro and otro["id"] != rid:
+        raise ValueError(f"«{codigo}» ya existe.")
+    anterior = db().get("catalogos_estrategicos", rid) if rid else None
+    orden = to_float(d.get("orden"))
+    if orden is None:
+        orden = (anterior or {}).get("orden")
+    if orden is None:
+        orden = (db().scalar("SELECT MAX(orden) FROM catalogos_estrategicos WHERE tipo_catalogo='ACT_COM'") or 0) + 1
+    nuevo = ctrl().save_catalogo("ACT_COM", {"codigo": codigo, "descripcion": codigo, "extra": "", "padre": "",
+                                             "eje": "", "orden": int(orden)}, rid)
+    if anterior and anterior["codigo"] != codigo:
+        db().execute("UPDATE otras_operativas SET actividad_comercial=? WHERE actividad_comercial=?",
+                     (codigo, anterior["codigo"]))
+        db().conn.commit()
+    return nuevo
+
+
 def _admin_delete(entidad: str, rid: int) -> None:
     c = ctrl()
     if entidad == "unidades":
@@ -1437,6 +1474,14 @@ def _admin_delete(entidad: str, rid: int) -> None:
         db().delete("catalogos_estrategicos", rid)
     elif entidad == "costos":
         db().delete("costos_referencia", rid)
+    elif entidad == "act_comercial":
+        fila = db().get("catalogos_estrategicos", rid)
+        n = db().scalar("SELECT COUNT(*) FROM otras_operativas WHERE actividad_comercial=?", (fila["codigo"],)) \
+            if fila else 0
+        if n:
+            raise ValueError(f"«{fila['codigo']}» está en uso en {n} actividad(es): renómbrela o cambie esas "
+                             "actividades antes de eliminarla.")
+        db().delete("catalogos_estrategicos", rid)
     elif entidad == "plantilla":
         db().delete("plantilla_funcionamiento", rid)
     elif entidad == "usuarios":

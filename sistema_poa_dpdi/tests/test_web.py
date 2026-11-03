@@ -268,6 +268,65 @@ class WebTest(unittest.TestCase):
         self.assertIn("#123456", html)  # un color personalizado por la DPDI se respeta
         self.assertRegex(html, r"css/app\.css\?v=\d+")
 
+    def test_tipo_actividad_comercial_marketing(self):
+        from catalogs_seed import ACTIVIDADES_COMERCIALES
+        # catálogo inicial y mantenedor (Catálogos filtrado por ACT_COM)
+        cat = self.api(self.admin, "GET", "/api/admin/t/catalogos?tipo=ACT_COM")["rows"]
+        self.assertEqual([x["codigo"] for x in cat], ACTIVIDADES_COMERCIALES)
+        self.assertEqual(len(self.api(self.admin, "GET", "/api/listas")["act_comercial"]), 18)
+        self.assertEqual(self.admin.get("/admin/act_comercial").status_code, 200)
+        nuevo = self.api(self.admin, "POST", "/api/admin/t/act_comercial", {"codigo": "ventas  lima norte"})["id"]
+        self.assertIn("VENTAS LIMA NORTE", [x["value"] for x in self.api(self.admin, "GET", "/api/listas")["act_comercial"]])
+        self.api(self.admin, "POST", "/api/admin/t/act_comercial", {"codigo": "ATL"}, codigo=400)  # duplicado
+        self.api(self.admin, "DELETE", f"/api/admin/t/act_comercial/{nuevo}")
+        mkt = self.api(self.admin, "POST", "/api/admin/t/unidades",
+                       {"codigo_area": "601102", "nombre_unidad": "Lima Sur", "centro_costo": "DIRECCION DE MARKETING",
+                        "macrogrupo": "MARKETING"})["id"]
+        otra = next(u for u in self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]
+                    if u["codigo_area"] == "OL")["id"]
+        # el combo solo aparece en Otras operativas de unidades de Marketing
+        self.api(self.admin, "POST", "/api/contexto", {"uid": mkt})
+        self.assertIn("Tipo de Actividad Comercial", self.admin.get("/otras-operativas").get_data(as_text=True))
+        self.assertNotIn("Tipo de Actividad Comercial", self.admin.get("/iniciativas").get_data(as_text=True))
+        base = {"categoria": "Licencias de software", "nombre": "Campaña admisión 2027"}
+        self.api(self.admin, "POST", "/api/md/OO", base, codigo=400)  # obligatorio en Marketing
+        self.api(self.admin, "POST", "/api/md/OO", dict(base, actividad_comercial="RADIO"), codigo=400)  # no existe
+        r = self.api(self.admin, "POST", "/api/md/OO", dict(base, actividad_comercial="campañas"))
+        fila = next(x for x in self.api(self.admin, "GET", "/api/md/OO")["rows"] if x["id"] == r["id"])
+        self.assertEqual(fila["actividad_comercial"], "CAMPAÑAS")
+        self.api(self.admin, "POST", f"/api/md/OO/{r['id']}/detalle",
+                 {"tipo": "Egresos", "partida": "Material de oficina", "cantidad": "1", "costo_unit_moneda": "1000",
+                  "sustento": "Cotización", "meses": ["1000"] + [""] * 11})
+        sec = next(x for x in self.api(self.admin, "GET", "/api/resumen")["secciones"] if x["key"] == "s6m")
+        self.assertEqual(next(f for f in sec["rows"] if f[0] == "CAMPAÑAS")[1:4], [1, 0.0, 1000.0])
+        # renombrar la opción en el mantenedor actualiza los registros
+        camp = next(x for x in cat if x["codigo"] == "CAMPAÑAS")
+        self.api(self.admin, "DELETE", f"/api/admin/t/act_comercial/{camp['id']}", codigo=400)  # en uso
+        self.api(self.admin, "PUT", f"/api/admin/t/act_comercial/{camp['id']}", dict(camp, codigo="Campañas digitales"))
+        fila = next(x for x in self.api(self.admin, "GET", "/api/md/OO")["rows"] if x["id"] == r["id"])
+        self.assertEqual(fila["actividad_comercial"], "CAMPAÑAS DIGITALES")
+        # Excel: columna en Otras_Operat y en la BD consolidada; ida y vuelta conserva el valor
+        import openpyxl
+        libro = self.admin.get("/descargas/libro").data
+        wb = openpyxl.load_workbook(io.BytesIO(libro))
+        self.assertEqual(wb["Otras_Operat"]["K6"].value, "Tipo de actividad comercial (solo Marketing)")
+        bd = wb["BD_CONSOLIDADA_NIIF"]
+        col_ac = [c.value for c in bd[1]].index("Tipo_Actividad_Comercial") + 1
+        self.assertEqual(bd.cell(2, col_ac).value, "CAMPAÑAS DIGITALES")
+        rep = self.api(self.admin, "POST", "/cargas/ficha", data={"archivo": (io.BytesIO(libro), "f.xlsx"),
+                                                                  "destino": "actual"},
+                       content_type="multipart/form-data")
+        self.assertEqual(rep["conteos"]["OO"], 1)
+        self.assertEqual(self.api(self.admin, "GET", "/api/md/OO")["rows"][0]["actividad_comercial"],
+                         "CAMPAÑAS DIGITALES")
+        # en una unidad que no es de Marketing no se muestra ni se guarda
+        self.api(self.admin, "POST", "/api/contexto", {"uid": otra})
+        self.assertNotIn("Tipo de Actividad Comercial", self.admin.get("/otras-operativas").get_data(as_text=True))
+        r2 = self.api(self.admin, "POST", "/api/md/OO", dict(base, actividad_comercial="ATL"))
+        fila = next(x for x in self.api(self.admin, "GET", "/api/md/OO")["rows"] if x["id"] == r2["id"])
+        self.assertEqual(fila["actividad_comercial"], "")
+        self.assertFalse(any(x["key"] == "s6m" for x in self.api(self.admin, "GET", "/api/resumen")["secciones"]))
+
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
         self.assertIn("--primario: #123456", self.admin.get("/").get_data(as_text=True))

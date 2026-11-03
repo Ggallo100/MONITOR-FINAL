@@ -9,6 +9,8 @@ Las mismas reglas de negocio se ejecutan en el servidor (controllers.py).
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from catalogs_seed import UNIDADES_MEDIDA
 from database import MESES
 
@@ -226,6 +228,27 @@ TECHOS = ["techo_iniciativas", "techo_funcionamiento", "techo_otras_operativas",
           "meta_resultado_otras", "meta_resultado_propias"]
 
 
+# Combo especial del Registro Maestro de «Otras operativas»: solo para unidades del macrogrupo Marketing.
+CAMPO_ACT_COMERCIAL = {"key": "actividad_comercial", "label": "Tipo de Actividad Comercial", "type": "select",
+                       "src": "act_comercial", "required": True}
+COLUMNA_ACT_COMERCIAL = {"key": "actividad_comercial", "label": "Tipo de actividad comercial"}
+
+
+def master_para_unidad(kind: str, unidad: Optional[dict]) -> dict:
+    """Configuración del maestro según la unidad: agrega el combo comercial en Otras operativas de Marketing."""
+    from controllers import es_marketing
+    cfg = MASTER[kind]
+    if kind != "OO" or not es_marketing(unidad):
+        return cfg
+    cfg = dict(cfg)
+    campos = list(cfg["fields"])
+    campos.insert(next(i for i, f in enumerate(campos) if f["key"] == "categoria") + 1, CAMPO_ACT_COMERCIAL)
+    columnas = list(cfg["columns"])
+    columnas.insert(next(i for i, c in enumerate(columnas) if c["key"] == "categoria") + 1, COLUMNA_ACT_COMERCIAL)
+    cfg.update(fields=campos, columns=columnas)
+    return cfg
+
+
 def admin_entities() -> dict:
     from controllers import CATALOGOS_ESTRATEGICOS, PLANTILLA_PARAM
     from catalogs_seed import BASES_CALCULO
@@ -282,6 +305,17 @@ def admin_entities() -> dict:
             "columns": [{"key": "codigo", "label": "Código"}, {"key": "descripcion", "label": "Descripción"},
                         {"key": "eje", "label": "Eje"}, {"key": "padre", "label": "OE"},
                         {"key": "extra", "label": "Extra"}, {"key": "orden", "label": "Orden", "fmt": "int"}],
+        },
+        "act_comercial": {
+            "titulo": "Tipos de actividad comercial (Marketing)",
+            "ayuda": "Opciones del combo «Tipo de Actividad Comercial» del Registro Maestro de Otras operativas. Solo lo "
+                     "ven y completan las unidades del macrogrupo Marketing. Si renombra una opción, se actualizan las "
+                     "actividades que ya la usan; una opción en uso no se puede eliminar.",
+            "fields": [{"key": "codigo", "label": "Tipo de actividad comercial", "type": "text", "wide": True},
+                       {"key": "orden", "label": "Orden en el combo", "type": "number"}],
+            "columns": [{"key": "codigo", "label": "Tipo de actividad comercial"},
+                        {"key": "_uso", "label": "Actividades que lo usan", "fmt": "int"},
+                        {"key": "orden", "label": "Orden", "fmt": "int"}],
         },
         "costos": {
             "titulo": "Costos unitarios de referencia",

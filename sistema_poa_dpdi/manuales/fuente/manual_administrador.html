@@ -160,6 +160,21 @@
 <p>Para cada <b>objetivo anual del POA</b> registre su <b>Eje estratégico</b> y su <b>OE del PEI</b>. Esta relación es la que permite que,
   en Iniciativas, la lista de objetivos se filtre por eje y que el OE se complete automáticamente. Un objetivo sin eje no aparecerá
   al usuario; un objetivo sin OE dejará la iniciativa con la directriz DF-01 pendiente.</p>
+<h2>Tipos de actividad comercial (Marketing)</h2>
+<p>Menú <b>Administración → Tipos de actividad comercial (Marketing)</b>. Mantiene las opciones del combo <b>Tipo de Actividad
+  Comercial</b> que aparece, y es obligatorio, en el Registro Maestro de <b>Otras operativas</b> de las unidades cuyo macrogrupo es
+  <b>Marketing</b>. Viene cargado con: ATL, BRANDING, BTL, CAMPAÑAS, EVENTOS, INVESTIGACIÓN, LICENCIAS, PRODUCCIÓN, SERVICIOS, VENTAS
+  AREQUIPA, VENTAS JULIACA, VENTAS AYACUCHO, VENTAS CUZCO, VENTAS CAJAMARCA, VENTAS EDUCACIÓN CONTINUA, VENTAS MAESTRÍAS, VENTAS PREGRADO
+  y VENTAS SEGUNDAS ESPECIALIDADES.</p>
+<figure><img src="../img/a11_actividad_comercial.png"><figcaption><b>Figura 6.</b> Mantenedor de tipos de actividad comercial.</figcaption></figure>
+<ul>
+  <li><b>Agregar:</b> Nuevo → escriba el tipo (se guarda en mayúsculas) y, si desea, el orden en el combo → Guardar.</li>
+  <li><b>Renombrar:</b> seleccione la fila, cambie el texto y guarde. Las actividades que ya lo usan se actualizan solas.</li>
+  <li><b>Eliminar:</b> solo si ninguna actividad lo usa (columna «Actividades que lo usan» en 0).</li>
+  <li>Para que una unidad vea el combo, su <b>macrogrupo</b> debe ser «Marketing» (Unidades y techos o plantilla de parámetros).</li>
+  <li>La lista también está en la hoja <code>Catalogos_Estrategicos</code> de la plantilla de Parámetros y Catálogos, con el tipo
+    «Tipo de actividad comercial (Marketing)».</li>
+</ul>
 
 <h1 class="cap" id="c9"><span class="num">9</span>Costos de referencia y plantilla de funcionamiento</h1>
 <h2>Costos de referencia</h2>
@@ -167,7 +182,7 @@
   estimar sus requerimientos.</p>
 <h2>Plantilla de «Correr Actividades de Funcionamiento»</h2>
 <p>Define las filas que se insertan cuando una unidad pulsa <b>Correr Actividades de Funcionamiento</b> en Inicio.</p>
-<figure><img src="../img/a06_plantilla.png"><figcaption><b>Figura 6.</b> Plantilla de funcionamiento.</figcaption></figure>
+<figure><img src="../img/a06_plantilla.png"><figcaption><b>Figura 7.</b> Plantilla de funcionamiento.</figcaption></figure>
 <table class="libre">
   <tr><th>Campo</th><th>Descripción</th></tr>
   <tr><td>Ámbito</td><td><code>GLOBAL</code> para todas las unidades o el código de área de una unidad específica.</td></tr>
@@ -179,7 +194,7 @@
 </table>
 
 <h1 class="cap" id="c10"><span class="num">10</span>Usuarios y accesos</h1>
-<figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 7.</b> Usuarios y accesos.</figcaption></figure>
+<figure><img src="../img/a07_usuarios.png"><figcaption><b>Figura 8.</b> Usuarios y accesos.</figcaption></figure>
 <h2>Crear un usuario</h2>
 <ol class="pasos">
   <li>Pulse <b>Nuevo</b> y escriba el <b>usuario</b> (se recomienda el usuario del correo institucional, por ejemplo <code>ana.alva</code>;
@@ -216,14 +231,14 @@
 <h1 class="cap" id="c11"><span class="num">11</span>Tablero DPDI y revisión de fichas</h1>
 <p>El <b>Tablero DPDI</b> resume, por unidad, el estado de la ficha, los montos registrados frente a los techos, las directrices pendientes
   y la fecha del último cambio. Use el buscador para filtrar y haga clic en una unidad para abrirla.</p>
-<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 8.</b> Tablero DPDI.</figcaption></figure>
+<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 9.</b> Tablero DPDI.</figcaption></figure>
 <h2>Revisar una ficha enviada</h2>
 <ol class="pasos">
   <li>Seleccione la unidad (desde el tablero o la barra de unidad).</li>
   <li>Revise la <b>Ficha resumen</b> y el semáforo de directrices; descargue el libro Excel o el PDF si necesita revisar fuera de línea.</li>
   <li>En <b>Inicio → Estado de la ficha</b> elija la acción:</li>
 </ol>
-<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 9.</b> Acciones de revisión del administrador.</figcaption></figure>
+<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 10.</b> Acciones de revisión del administrador.</figcaption></figure>
 <table class="libre">
   <tr><th>Acción</th><th>Desde</th><th>Resultado</th></tr>
   <tr><td>Aprobar</td><td>Enviada</td><td>La ficha queda <span class="chip aprobada">Aprobada</span> y en solo lectura para la unidad.</td></tr>
@@ -244,7 +259,7 @@
 <h1 class="cap" id="c13"><span class="num">13</span>Bitácora y respaldos</h1>
 <p>La <b>Bitácora</b> registra quién hizo qué y cuándo: ingresos, intentos fallidos, altas y cambios de registros, importaciones,
   descargas, cambios de estado y cambios de parámetros, con la dirección IP del equipo. Puede filtrarla por texto (usuario, unidad, acción).</p>
-<figure><img src="../img/a08_bitacora.png"><figcaption><b>Figura 10.</b> Bitácora de auditoría.</figcaption></figure>
+<figure><img src="../img/a08_bitacora.png"><figcaption><b>Figura 11.</b> Bitácora de auditoría.</figcaption></figure>
 <p>Tecnología programa respaldos automáticos diarios. Además, se recomienda que la DPDI descargue un <b>respaldo completo</b>:</p>
 <ul>
   <li>antes de cada importación masiva de la plantilla o de fichas Excel;</li>

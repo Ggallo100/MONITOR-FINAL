@@ -25,7 +25,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from catalogs_seed import CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN, UNIDADES_MEDIDA
-from controllers import POAController, fmt_money, fmt_pct, norm_key, s, to_float
+from controllers import POAController, es_marketing, fmt_money, fmt_pct, norm_key, s, to_float
 from database import MCOLS, MESES
 
 # =============================================================================
@@ -183,6 +183,7 @@ class OfficialWorkbookExporter:
         self.d = ctrl.load_unit_data(uid)
         self.summary = ctrl.build_summary(uid, self.d)
         self.u = self.d["unidad"]
+        self.marketing = es_marketing(self.u)
         self.p = self.d["params"]
         self.prm = self.p.raw or {}
         self.L: dict[str, tuple[int, int, int]] = {}
@@ -458,6 +459,13 @@ class OfficialWorkbookExporter:
                 x.put(f"{c_}{r}", v, "plain")
             r += 1
         self.P["h6_obj"] = (6, max(6, r - 1))
+        # Tipos de actividad comercial (combo de Otras operativas para el macrogrupo Marketing)
+        x.headers(5, ["Tipo de actividad comercial"], 19)
+        x.widths({"S": 34})
+        act = self.c.actividades_comerciales()
+        for i, v in enumerate(act):
+            x.put(f"S{6 + i}", v, "plain")
+        self.P["h6_actcom"] = (6, max(6, 5 + len(act)))
 
     def _names(self, wb):
         P = self.P
@@ -495,6 +503,8 @@ class OfficialWorkbookExporter:
         add("L_ObjEje", f"Hoja6!$N${a}:$N${b}")
         add("L_ObjCod", f"Hoja6!$O${a}:$O${b}")
         add("L_ObjOE", f"Hoja6!$O${a}:$P${b}")
+        a, b = P["h6_actcom"]
+        add("L_ActCom", f"Hoja6!$S${a}:$S${b}")
         for name, sheet, key in (("L_INI", "Iniciativas", "INI"), ("L_OO", "Otras_Operat", "OO"),
                                  ("L_AP", "Act_Prop", "AP"), ("L_INV", "Inversion", "INV")):
             fr, lr, _ = self.L[key]
@@ -811,9 +821,11 @@ class OfficialWorkbookExporter:
         x.group(5, "A", "D", "Identificación de la actividad")
         x.group(5, "E", "I", "Gestión y resultado (calculado)")
         x.group(5, "J", "J", "Revisión")
+        x.group(5, "K", "K", "Marketing")
         x.headers(6, ["Código", "Categoría", "Nombre de la actividad", "Descripción y justificación", "Responsable",
-                      "Ingresos Total (S/)", "Costo total (S/)", "Resultado (S/)", "Margen (%)", "Observaciones"])
-        x.widths({"A": 10, "B": 30, "C": 36, "D": 48, "E": 26, "F": 14, "G": 14, "H": 14, "I": 10, "J": 34})
+                      "Ingresos Total (S/)", "Costo total (S/)", "Resultado (S/)", "Margen (%)", "Observaciones",
+                      "Tipo de actividad comercial (solo Marketing)"])
+        x.widths({"A": 10, "B": 30, "C": 36, "D": 48, "E": 26, "F": 14, "G": 14, "H": 14, "I": 10, "J": 34, "K": 30})
         fr, lr, tr = self.L["OO"]
         dfr, dlr, _ = self.L["DET_OO"]
 
@@ -841,12 +853,16 @@ class OfficialWorkbookExporter:
             for j, v in enumerate(vals):
                 x.put(f"{col(j + 1)}{r}", v or None, "input")
             x.put(f"J{r}", (m["observaciones"] if m else None) or None, "input")
+            x.put(f"K{r}", (m.get("actividad_comercial") if m else None) or None,
+                  "input" if self.marketing else "calc")
             formulas(r, dfr, dlr, "calc")
         x.put(f"A{tr}", "TOTAL OTRAS ACTIVIDADES OPERATIVAS (no incluye la fila de ejemplo)", "total")
         ws.merge_cells(f"A{tr}:E{tr}")
         for c_ in "FGH":
             x.put(f"{c_}{tr}", f"=SUM({c_}{fr}:{c_}{lr})", "total", MONEY)
         x.dv_list(f"B{fr}:B{lr}", "=L_CatOO")
+        if self.marketing:
+            x.dv_list(f"K{fr}:K{lr}", "=L_ActCom", "Tipo de actividad comercial (mantenedor de la DPDI).")
 
     # ------------------------------------- Detalle_Otras_Operativas / Act_Prop
     def _det_generic(self, ws, kind: str, key: str, master_sheet: str):

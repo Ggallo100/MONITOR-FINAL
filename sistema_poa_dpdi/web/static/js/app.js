@@ -628,6 +628,8 @@
     await POA.listas();
     let rid = null;
     const filtro = $("#filtro");
+    const tipoUrl = new URLSearchParams(location.search).get("tipo");  // acceso directo, p. ej. ?tipo=ACT_COM
+    if (filtro && tipoUrl && Array.from(filtro.options).some((o) => o.value === tipoUrl)) filtro.value = tipoUrl;
     const url = () => `/api/admin/t/${entidad}` + (filtro ? "?tipo=" + filtro.value : "");
     const urlId = (id) => `/api/admin/t/${entidad}/${id}` + (filtro ? "?tipo=" + filtro.value : "");
     const form = new Form($("#a-form"), cfg.fields, {});

@@ -364,6 +364,8 @@ class Database:
         ("unidades_organicas", "estado_fecha", "TEXT DEFAULT ''"),
         ("unidades_organicas", "estado_usuario", "TEXT DEFAULT ''"),
         ("bitacora", "ip", "TEXT DEFAULT ''"),
+        # Tipo de actividad comercial (solo unidades del macrogrupo Marketing)
+        ("otras_operativas", "actividad_comercial", "TEXT DEFAULT ''"),
     ]
 
     def create_schema(self) -> None:

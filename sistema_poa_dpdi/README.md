@@ -96,6 +96,15 @@ servidor agrega las tablas de usuarios y estados sin perder la información.
 La base SQLite en modo WAL admite decenas de usuarios trabajando a la vez (formulación por unidades, escrituras
 breves). Si la universidad prevé cientos de usuarios simultáneos, conviene migrar la capa de datos a PostgreSQL.
 
+### Tipo de Actividad Comercial (macrogrupo Marketing)
+
+En las unidades cuyo macrogrupo es **Marketing**, el Registro Maestro de *Otras operativas* incluye el combo
+obligatorio **Tipo de Actividad Comercial** (ATL, BRANDING, BTL, CAMPAÑAS, EVENTOS, INVESTIGACIÓN, LICENCIAS,
+PRODUCCIÓN, SERVICIOS y VENTAS por sede/programa). Las opciones se mantienen en *Administración → Tipos de actividad
+comercial (Marketing)* (catálogo `ACT_COM`): renombrar actualiza los registros y no se puede eliminar una opción en
+uso. Se exporta en `Otras_Operat` (columna K), en la BD consolidada (`Tipo_Actividad_Comercial`) y en la sección 6.1
+de la Ficha resumen de esas unidades.
+
 ### Manuales y soporte
 
 Los manuales en PDF están en `manuales/pdf/` y se publican en la página **Ayuda** del sistema según el rol:
