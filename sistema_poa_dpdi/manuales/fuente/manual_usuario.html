@@ -155,22 +155,10 @@
   <li><b>Egresos (FE):</b> partidas recurrentes. Indique cantidad y costo unitario (el coste total se calcula), si <b>aplica reajuste</b>
     (se aplica el porcentaje y el mes de reajuste definidos por la DPDI), la <b>proporción mensual</b> y el sustento.</li>
   <li><b>Ingresos (FI):</b> conceptos de ingreso de la unidad (pensiones, cursos, servicios), con cantidad, tarifa, porcentaje de becas,
-    si aplica morosidad, los <b>meses de cobro</b> y el sustento. El ingreso neto mensual <b>devengado</b> = cantidad × tarifa × marca del mes × (1 − becas).</li>
+    si aplica morosidad, los <b>meses de cobro</b> y el sustento. El ingreso neto mensual = cantidad × tarifa × marca del mes × (1 − becas) × (1 − morosidad).</li>
 </ul>
 <figure><img src="../img/u08_funcionamiento_egresos.png"><figcaption><b>Figura 9.</b> Funcionamiento – egresos.</figcaption></figure>
 <figure><img src="../img/u09_funcionamiento_ingresos.png"><figcaption><b>Figura 10.</b> Funcionamiento – ingresos.</figcaption></figure>
-<h2>Morosidad por rangos de días de atraso</h2>
-<p>Si en un ingreso marca <b>¿Aplica morosidad? = Sí</b>, el sistema proyecta su cobranza con los rangos que define la DPDI:</p>
-<table class="libre">
-  <tr><th>Rango</th><th>Días de atraso</th><th>Efecto</th></tr>
-  <tr><td>Morosidad temprana</td><td>0 a 30</td><td>Esa parte se cobra el mes siguiente. No reduce el ingreso del año.</td></tr>
-  <tr><td>Morosidad intermedia</td><td>31 a 180</td><td>Esa parte se cobra meses después (4 por defecto). Lo que pasa de diciembre queda por cobrar el año siguiente.</td></tr>
-  <tr><td>Morosidad dura o incobrable</td><td>más de 180</td><td>No se cobra: se registra como <b>provisión</b> (gasto) en la cuenta «Cuentas por cobrar comerciales – terceros».</td></tr>
-</table>
-<p>El formulario muestra, además del ingreso devengado, la <b>cobranza en el año</b>, lo que queda <b>por cobrar el año siguiente</b> y el
-  <b>incobrable</b> que pasa a la provisión. Las tasas de cada rango las fija la DPDI; la unidad solo indica si el ingreso aplica morosidad.</p>
-<div class="tip"><b>Provisión actualizada</b>La fila de provisión se calcula cuando pulsa «Correr Actividades de Funcionamiento» en Inicio.
-  Si después modifica los ingresos, vuelva a correrla (con «Reemplazar» marcado) para actualizar el monto.</div>
 <div class="nota"><b>Meses en Funcionamiento</b>En estas dos pestañas los meses no llevan montos sino <b>proporciones</b>. En egresos,
   <code>0.08333333</code> (1/12) en cada mes reparte el coste total en partes iguales durante el año. En ingresos y egresos puede
   escribir <code>x</code> en un mes para marcarlo como mes completo de cobro o pago, o un factor (por ejemplo <code>0.5</code>).</div>
@@ -212,9 +200,6 @@
   <tr><td>AP-02</td><td>Actividades propias sin tipo o sin mes de ejecución.</td><td>Complete tipo y mes en el maestro.</td></tr>
 </table>
 <figure><img src="../img/u13_resumen_s1.png"><figcaption><b>Figura 15.</b> Sección 1: consumo de techos por tipo de actividad.</figcaption></figure>
-<p>La sección <b>2.1 Morosidad y cobranza proyectada</b> muestra mes a mes el ingreso devengado, el cobro oportuno, los recuperos de la
-  morosidad temprana e intermedia, la cobranza total y el incobrable. Se cumple: devengado = cobranza + por cobrar el año siguiente + incobrable.</p>
-<figure><img src="../img/u18_morosidad_cobranza.png"><figcaption><b>Figura 16.</b> Sección 2.1: morosidad y cobranza proyectada.</figcaption></figure>
 <div class="nota"><b>Techos</b>En la sección 1, «Dentro del techo» indica que el gasto programado no supera el techo; «Excede techo»
   activa la directriz DP-01; «Sin techo» indica que hay gasto en un tipo de actividad sin techo asignado.</div>
 
@@ -231,7 +216,7 @@
   <li>En <b>Inicio</b>, tarjeta «Estado de la ficha», pulse <b>Enviar a revisión de la DPDI</b> y confirme.</li>
   <li>Si la ficha vuelve como <b>Observada</b>, lea la observación en la misma tarjeta, corrija y envíe nuevamente.</li>
 </ol>
-<figure><img src="../img/u17_solo_lectura.png"><figcaption><b>Figura 17.</b> Ficha enviada: las pantallas quedan en solo lectura.</figcaption></figure>
+<figure><img src="../img/u17_solo_lectura.png"><figcaption><b>Figura 16.</b> Ficha enviada: las pantallas quedan en solo lectura.</figcaption></figure>
 <div class="alerta"><b>Fecha de cierre</b>Envíe la ficha antes de la fecha de cierre que aparece en la pantalla de acceso. Si necesita
   modificar una ficha ya enviada o aprobada, solicite a la DPDI que la <b>reabra</b>.</div>
 

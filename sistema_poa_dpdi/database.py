@@ -287,20 +287,6 @@ CREATE TABLE IF NOT EXISTS funcionamiento_egr (
 {_detalle_ddl('detalle_act_prop', 'act_propias')}
 {_detalle_ddl('detalle_inversiones', 'inversiones')}
 
-CREATE TABLE IF NOT EXISTS rangos_morosidad (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo TEXT NOT NULL UNIQUE,
-    nombre TEXT NOT NULL,
-    dias_desde INTEGER NOT NULL DEFAULT 0,
-    dias_hasta INTEGER,                         -- NULL = sin límite superior
-    tasa_pct REAL DEFAULT 0,                    -- % del ingreso devengado que cae en este rango
-    tratamiento TEXT DEFAULT 'Desfase de cobro' CHECK (tratamiento IN ('Desfase de cobro', 'Provisión')),
-    meses_desfase INTEGER DEFAULT 0,            -- meses en que se recupera (solo «Desfase de cobro»)
-    descripcion TEXT DEFAULT '',
-    orden INTEGER DEFAULT 0,
-    activo INTEGER DEFAULT 1
-);
-
 CREATE TABLE IF NOT EXISTS app_meta (
     clave TEXT PRIMARY KEY,
     valor TEXT
@@ -494,36 +480,6 @@ class Database:
     def save_parametros(self, data: dict) -> None:
         self.parametros()
         self.update("parametros_globales", 1, data)
-        if "tasa_morosidad_pct" in data:
-            self.morosidad_desde_parametro(data["tasa_morosidad_pct"])
-
-    # ------------------------------------------------- morosidad por rangos
-    def rangos_morosidad(self, solo_activos: bool = False) -> list[dict]:
-        if not self.table_exists("rangos_morosidad"):
-            return []
-        filtro = " WHERE activo = 1" if solo_activos else ""
-        return self.query(f"SELECT * FROM rangos_morosidad{filtro} ORDER BY dias_desde, orden")
-
-    def tasa_provision(self) -> float:
-        return sum((r["tasa_pct"] or 0.0) for r in self.rangos_morosidad(True) if r["tratamiento"] == "Provisión")
-
-    def morosidad_desde_rangos(self) -> None:
-        """El parámetro «Tasa de morosidad» refleja la suma de los rangos tratados como provisión."""
-        self.conn.execute("UPDATE parametros_globales SET tasa_morosidad_pct=? WHERE id=1", (self.tasa_provision(),))
-        self.conn.commit()
-
-    def morosidad_desde_parametro(self, valor) -> None:
-        """Si se edita la tasa única (parámetros, plantilla o Ficha Excel) y hay un solo rango de provisión,
-        ese rango toma el nuevo valor; luego el parámetro se recalcula desde los rangos."""
-        try:
-            valor = float(valor) if valor not in (None, "") else None
-        except (TypeError, ValueError):
-            valor = None
-        prov = [r for r in self.rangos_morosidad(True) if r["tratamiento"] == "Provisión"]
-        if valor is not None and len(prov) == 1 and abs((prov[0]["tasa_pct"] or 0.0) - valor) > 1e-12:
-            self.conn.execute("UPDATE rangos_morosidad SET tasa_pct=? WHERE id=?", (valor, prov[0]["id"]))
-        if prov:
-            self.morosidad_desde_rangos()
 
     def catalogo(self, tipo_catalogo: str) -> list[dict]:
         return self.all("catalogos_estrategicos", "tipo_catalogo = ?", (tipo_catalogo,), "orden, codigo")

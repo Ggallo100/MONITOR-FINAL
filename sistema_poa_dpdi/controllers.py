@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -62,8 +62,7 @@ PARAM_GENERALES = [
     ("valor_uit", "Valor de la UIT (S/)", ""), ("rmv", "Remuneración mínima vital (S/)", ""),
     ("reajuste_remunerativo_pct", "Reajuste remunerativo (%)", "Filas de Funcionamiento_Egr con «Aplica reajuste = Sí»."),
     ("mes_inicio_reajuste", "Mes desde el que se aplica el reajuste (1–12)", "1 = enero … 12 = diciembre."),
-    ("tasa_morosidad_pct", "Tasa de morosidad dura / incobrable (%)",
-     "Suma de los rangos de morosidad con tratamiento «Provisión» (mantenedor Rangos de morosidad)."),
+    ("tasa_morosidad_pct", "Tasa de morosidad proyectada (%)", "Filas de Funcionamiento_Ing con «Aplica morosidad = Sí»."),
     ("estudiantes_pregrado", "Estudiantes proyectados — pregrado", ""),
     ("estudiantes_posgrado", "Estudiantes proyectados — posgrado", ""),
     ("pension_ref_pregrado", "Pensión promedio de referencia — pregrado (S/)", ""),
@@ -104,12 +103,6 @@ PLANTILLA_PARAM = {
                                ("descripcion", "Descripción"), ("eje", "Eje estratégico (solo objetivos POA)"),
                                ("padre", "OE del PEI (solo objetivos POA)"),
                                ("extra", "Alcance / indicador / criterio"), ("orden", "Orden")],
-    "Rangos_Morosidad": [("id", "ID"), ("codigo", "Código"), ("nombre", "Nombre del rango"),
-                         ("dias_desde", "Días de atraso desde"), ("dias_hasta", "Días de atraso hasta (vacío = sin límite)"),
-                         ("tasa_pct", "Tasa del ingreso devengado (%)"),
-                         ("tratamiento", "Tratamiento (Desfase de cobro / Provisión)"),
-                         ("meses_desfase", "Meses de desfase"), ("descripcion", "Descripción"),
-                         ("orden", "Orden"), ("activo", "Activo (Sí/No)")],
     "Costos_Referencia": [("id", "ID"), ("concepto", "Concepto"), ("unidad_medida", "Unidad de medida"),
                           ("costo_unitario", "Costo unitario (S/)"), ("fuente", "Fuente / vigencia")],
     "Plantilla_Funcionamiento": [("id", "ID"), ("ambito", "Ámbito (GLOBAL o código de área)"),
@@ -249,9 +242,8 @@ class Params:
     inflacion: float = 0.025
     reajuste: float = 0.0
     mes_reajuste: int = 1
-    morosidad: float = 0.0          # tasa total tratada como provisión (morosidad dura / incobrable)
+    morosidad: float = 0.0
     raw: Optional[dict] = None
-    rangos: list = field(default_factory=list)   # rangos de morosidad activos (mantenedor)
 
     @classmethod
     def from_db(cls, db: Database) -> "Params":
@@ -263,9 +255,8 @@ class Params:
             inflacion=to_float(p.get("inflacion_proyectada"), 0.0) or 0.0,
             reajuste=to_float(p.get("reajuste_remunerativo_pct"), 0.0) or 0.0,
             mes_reajuste=min(12, max(1, mes)),
-            morosidad=db.tasa_provision(),
+            morosidad=to_float(p.get("tasa_morosidad_pct"), 0.0) or 0.0,
             raw=p,
-            rangos=db.rangos_morosidad(True),
         )
 
 
@@ -277,13 +268,6 @@ def to_soles(amount: Optional[float], moneda: str, tc: float) -> Optional[float]
     if amount is None:
         return None
     return amount * tc if (moneda or "").strip() == "US$" else amount
-
-
-def rango_dias(r: dict) -> str:
-    """0–30 días · 181 días a más."""
-    if r.get("dias_hasta") is None:
-        return f"{r['dias_desde']} días a más"
-    return f"{r['dias_desde']}–{r['dias_hasta']} días"
 
 
 def control_distribucion(total: float, programado: float) -> str:
@@ -311,50 +295,22 @@ def calc_detalle(row: dict, p: Params) -> dict:
 
 
 def calc_fing(row: dict, p: Params) -> dict:
-    """Funcionamiento_Ing.
-    Ingreso mensual devengado = Cant × Tarifa S/ × factor × (1−Becas).
-    Si «Aplica morosidad = Sí», la cobranza se proyecta con los rangos de morosidad:
-      · «Desfase de cobro» (temprana, intermedia): la parte del rango se cobra N meses después; lo que pasa de
-        diciembre queda por cobrar al año siguiente. No reduce el ingreso del año.
-      · «Provisión» (dura / incobrable): no se cobra; se registra como gasto en la provisión de cuentas por cobrar.
-    Así la morosidad no se descuenta dos veces (ingreso y provisión)."""
+    """Funcionamiento_Ing: ingreso mensual neto = Cant × Tarifa S/ × factor × (1−Becas) × (1−Morosidad)."""
     cant = to_float(row.get("cantidad"))
     tarifa = to_float(row.get("tarifa_moneda"))
     tarifa_s = to_soles(tarifa, row.get("moneda"), p.tc)
     becas = to_float(row.get("becas_pct"), 0.0) or 0.0
+    moros = p.morosidad if (row.get("aplica_morosidad") or "").strip() == "Sí" else 0.0
     factores = [mark_factor(row.get(m)) for m in MCOLS]
     meses = []
     for f in factores:
         if cant is None or tarifa_s is None or f is None:
             meses.append(0.0)
         else:
-            meses.append(cant * tarifa_s * f * (1 - becas))
+            meses.append(cant * tarifa_s * f * (1 - becas) * (1 - moros))
     suma_f = sum(f for f in factores if f is not None)
     bruto = 0.0 if cant is None or tarifa_s is None else cant * tarifa_s * suma_f
     neto = sum(meses)
-    rangos = p.rangos if (row.get("aplica_morosidad") or "").strip() == "Sí" else []
-    tasa_total = sum((r["tasa_pct"] or 0.0) for r in rangos)
-    oportuno = [m * (1 - tasa_total) for m in meses]
-    cobranza = list(oportuno)
-    recupero: dict[str, list] = {}
-    incobrable: dict[str, list] = {}
-    traslado: dict[str, float] = {}
-    for r in rangos:
-        tasa = r["tasa_pct"] or 0.0
-        if r["tratamiento"] == "Provisión":
-            incobrable[r["codigo"]] = [m * tasa for m in meses]
-            continue
-        d = max(0, int(r["meses_desfase"] or 0))
-        rec = [0.0] * 12
-        fuera = 0.0
-        for i, m in enumerate(meses):
-            if i + d < 12:
-                rec[i + d] += m * tasa
-            else:
-                fuera += m * tasa
-        recupero[r["codigo"]] = rec
-        traslado[r["codigo"]] = fuera
-        cobranza = [a + b for a, b in zip(cobranza, rec)]
     return {
         "tarifa_soles": tarifa_s,
         "meses": meses,
@@ -362,14 +318,6 @@ def calc_fing(row: dict, p: Params) -> dict:
         "neto": neto,
         "descuentos": bruto - neto,
         "n_meses": sum(1 for f in factores if f not in (None, 0.0)),
-        "cobranza": cobranza,
-        "cobranza_total": sum(cobranza),
-        "oportuno": oportuno,
-        "recupero": recupero,
-        "incobrable_meses": incobrable,
-        "incobrable": sum(sum(v) for v in incobrable.values()),
-        "traslado": traslado,
-        "por_cobrar_siguiente": sum(traslado.values()),
     }
 
 
@@ -675,81 +623,6 @@ class POAController:
         self.invalidate_cache()
         return rid
 
-    # ------------------------------------------------- rangos de morosidad
-    TRATAMIENTOS_MOROSIDAD = ("Desfase de cobro", "Provisión")
-
-    def save_rango_morosidad(self, data: dict, row_id: Optional[int] = None, validar_conjunto: bool = True) -> int:
-        """Crea o actualiza un rango de morosidad por días de atraso, validando solapes y tasas."""
-        codigo = norm_key(data.get("codigo")).upper().replace(" ", "_")
-        nombre = s(data.get("nombre"))
-        if not codigo or not nombre:
-            raise ValueError("Indique el código y el nombre del rango.")
-        desde = to_float(data.get("dias_desde"))
-        hasta = to_float(data.get("dias_hasta"))
-        if desde is None or desde < 0:
-            raise ValueError("«Días desde» debe ser un número mayor o igual a 0.")
-        if hasta is not None and hasta < desde:
-            raise ValueError("«Días hasta» debe ser mayor o igual que «Días desde» (déjelo vacío si no tiene límite).")
-        tasa = parse_pct(data.get("tasa_pct")) if s(data.get("tasa_pct")) else 0.0
-        if tasa is None or not 0 <= tasa <= 1:
-            raise ValueError("La tasa debe estar entre 0 % y 100 %.")
-        trat = s(data.get("tratamiento")) or "Desfase de cobro"
-        if trat not in self.TRATAMIENTOS_MOROSIDAD:
-            raise ValueError("Tratamiento no válido: use «Desfase de cobro» o «Provisión».")
-        meses = to_float(data.get("meses_desfase"))
-        if trat == "Provisión":
-            meses = 0
-        elif meses is None:  # por defecto: punto medio del rango en meses (redondeo hacia arriba)
-            medio = ((desde + hasta) / 2) if hasta is not None else desde
-            meses = max(1, math.ceil(medio / 30))
-        if not 0 <= meses <= 24:
-            raise ValueError("Los meses de desfase deben estar entre 0 y 24.")
-        activo = 0 if data.get("activo") in (0, "0", False, "No", "no") else 1
-        reg = {"codigo": codigo, "nombre": nombre, "dias_desde": int(desde),
-               "dias_hasta": None if hasta is None else int(hasta), "tasa_pct": tasa, "tratamiento": trat,
-               "meses_desfase": int(meses), "descripcion": s(data.get("descripcion")),
-               "orden": int(to_float(data.get("orden"), 0) or 0), "activo": activo}
-        otro = self.db.query_one("SELECT id FROM rangos_morosidad WHERE codigo=?", (codigo,))
-        if otro and otro["id"] != row_id:
-            raise ValueError(f"Ya existe un rango con el código {codigo}.")
-        if validar_conjunto and activo:
-            inf = float("inf")
-            for r in self.db.rangos_morosidad(True):
-                if r["id"] == row_id:
-                    continue
-                a2 = inf if r["dias_hasta"] is None else r["dias_hasta"]
-                b2 = inf if hasta is None else hasta
-                if desde <= a2 and r["dias_desde"] <= b2:
-                    raise ValueError(f"El rango se superpone con «{r['nombre']}» ({rango_dias(r)}).")
-            total = tasa + sum((r["tasa_pct"] or 0.0) for r in self.db.rangos_morosidad(True) if r["id"] != row_id)
-            if total > 1 + 1e-9:
-                raise ValueError(f"La suma de las tasas de los rangos activos sería {total:.1%}: no puede superar 100 %.")
-        if row_id:
-            self.db.update("rangos_morosidad", row_id, reg)
-        else:
-            row_id = self.db.insert("rangos_morosidad", reg)
-        self.db.morosidad_desde_rangos()
-        return row_id
-
-    def validar_rangos_morosidad(self) -> list[str]:
-        """Revisa el conjunto de rangos activos (solapes y suma de tasas) y devuelve avisos."""
-        avisos = []
-        activos = self.db.rangos_morosidad(True)
-        for i, a in enumerate(activos):
-            for b in activos[i + 1:]:
-                fa = float("inf") if a["dias_hasta"] is None else a["dias_hasta"]
-                fb = float("inf") if b["dias_hasta"] is None else b["dias_hasta"]
-                if a["dias_desde"] <= fb and b["dias_desde"] <= fa:
-                    avisos.append(f"Rangos de morosidad: «{a['nombre']}» y «{b['nombre']}» se superponen.")
-        total = sum((r["tasa_pct"] or 0.0) for r in activos)
-        if total > 1 + 1e-9:
-            avisos.append(f"Rangos de morosidad: las tasas activas suman {total:.1%} (máximo 100 %).")
-        return avisos
-
-    def delete_rango_morosidad(self, row_id: int) -> None:
-        self.db.delete("rangos_morosidad", row_id)
-        self.db.morosidad_desde_rangos()
-
     def delete_partida_niif(self, row_id: int) -> None:
         self.db.delete("catalogo_niif_partidas", row_id)
         self.invalidate_cache()
@@ -1038,8 +911,9 @@ class POAController:
             return (to_float(p.get("estudiantes_posgrado"), 0.0) or 0.0) * \
                 (to_float(p.get("pension_ref_posgrado"), 0.0) or 0.0) * cuotas * 2 * pct
         if base == "PROVISION_MOROSIDAD":
-            # Incobrable estimado por los rangos de morosidad tratados como «Provisión» (morosidad dura)
-            return sum(r["_c"]["incobrable"] for r in self.list_flat("FI", u["id"])) * pct
+            ing = sum(r["_c"]["bruto"] for r in self.list_flat("FI", u["id"]) if not r["origen_plantilla"]
+                      or r["categoria"] in ("PENSIÓN", "MATRICULA"))
+            return ing * (to_float(p.get("tasa_morosidad_pct"), 0.0) or 0.0) * pct
         raise ValueError(f"Base de cálculo desconocida: {base} (válidas: {', '.join(BASES_CALCULO)})")
 
     def correr_funcionamiento(self, uid: int, reemplazar: bool = True) -> dict:
@@ -1105,45 +979,6 @@ class POAController:
     # ====================================================================
     # FICHA RESUMEN — 12 secciones
     # ====================================================================
-    @staticmethod
-    def _seccion_morosidad(fi: list, p: Params) -> dict:
-        """2.1 Cobranza proyectada de los ingresos de funcionamiento según los rangos de morosidad."""
-        def suma(clave, sub=None):
-            tot = [0.0] * 12
-            for r in fi:
-                v = r["_c"].get(clave)
-                if sub is not None:
-                    v = (v or {}).get(sub)
-                for i, x in enumerate(v or []):
-                    tot[i] += x
-            return tot
-
-        def fila(nombre, meses, extra=None):
-            return [nombre, *meses, sum(meses) if extra is None else extra]
-
-        rows = [fila("Ingreso devengado (neto de becas)", suma("meses")),
-                fila("Cobro oportuno (en el mes)", suma("oportuno"))]
-        desfase = [r for r in p.rangos if r["tratamiento"] != "Provisión"]
-        prov = [r for r in p.rangos if r["tratamiento"] == "Provisión"]
-        for r in desfase:
-            rows.append(fila(f"Recupero {r['codigo'].lower()} (+{r['meses_desfase']} m)", suma("recupero", r["codigo"])))
-        cobr = suma("cobranza")
-        rows.append(fila("Cobranza proyectada", cobr))
-        i_total = len(rows) - 1
-        for r in prov:
-            rows.append(fila(f"Incobrable {r['codigo'].lower()} (provisión)", suma("incobrable_meses", r["codigo"])))
-        traslado = sum(r["_c"].get("por_cobrar_siguiente", 0.0) for r in fi)
-        rows.append(["Por cobrar el año siguiente", *[None] * 12, traslado])
-        return dict(key="s2m", title="2.1 Morosidad y cobranza proyectada de ingresos de funcionamiento (S/)",
-                    headers=["Concepto", *MESES, "Total"], formats=["text"] + ["money"] * 13, rows=rows,
-                    totals={0, i_total},
-                    note="Rangos: " + "; ".join(f"{r['nombre']} {rango_dias(r)}, {r['tasa_pct'] or 0:.1%}"
-                                                + (" (provisión)" if r["tratamiento"] == "Provisión"
-                                                   else f" (se cobra +{r['meses_desfase']} {'mes' if r['meses_desfase'] == 1 else 'meses'})")
-                                                for r in p.rangos)
-                         + ". Solo se aplica a los ingresos con «¿Aplica morosidad? = Sí». Devengado = cobro oportuno + "
-                         "recuperos en el año + por cobrar el año siguiente + incobrable (provisión).")
-
     def build_summary(self, uid: int, data: Optional[dict] = None) -> dict:
         d = data or self.load_unit_data(uid)
         u, p = d["unidad"], d["params"]
@@ -1207,11 +1042,9 @@ class POAController:
                    None])
         out["sections"].append(dict(
             key="s2", title="2. Ingresos proyectados",
-            headers=["Categoría", "N° de actividades", "Ingreso bruto (S/)", "Becas y descuentos (S/)",
+            headers=["Categoría", "N° de actividades", "Ingreso bruto (S/)", "Becas, descuentos y morosidad (S/)",
                      "Ingreso neto (S/)", "% del total"],
-            formats=["text", "int", "money", "money", "money", "pct"], rows=s2, totals={len(s2) - 2},
-            note="Ingreso devengado. La morosidad no lo reduce: se refleja en la cobranza (2.1) y en la provisión."))
-        out["sections"].append(self._seccion_morosidad(fi, p))
+            formats=["text", "int", "money", "money", "money", "pct"], rows=s2, totals={len(s2) - 2}))
 
         # ---------------- 3. Metas de ingresos y resultado
         meta_ing = u["meta_ingresos_func"] or 0.0
@@ -1978,9 +1811,7 @@ class POAController:
         """Lee la plantilla «Parámetros y Catálogos» (descargada desde el sistema) y actualiza la base."""
         import openpyxl
         wb = openpyxl.load_workbook(path, data_only=True)
-        hojas = set(wb.sheetnames)
-        opcionales = {"Rangos_Morosidad"}  # plantillas descargadas antes de existir esta hoja siguen siendo válidas
-        faltan = [sh for sh in PLANTILLA_PARAM if sh not in hojas and sh not in opcionales]
+        faltan = [sh for sh in PLANTILLA_PARAM if sh not in wb.sheetnames]
         if faltan:
             raise ValueError("El archivo no es la plantilla de Parámetros y Catálogos (faltan hojas: "
                              + ", ".join(faltan) + ").")
@@ -2123,25 +1954,6 @@ class POAController:
                 self.save_catalogo(tipo, data, cid)
                 n += 1
             rep["Catálogos estratégicos"] = n
-
-            # --- Rangos de morosidad (se validan en conjunto al final)
-            if "Rangos_Morosidad" not in hojas and "tasa_morosidad_pct" in gen:
-                self.db.morosidad_desde_parametro(gen["tasa_morosidad_pct"])
-            n = 0
-            filas_r = [r for r in tabla("Rangos_Morosidad") if s(r["codigo"])] if "Rangos_Morosidad" in hojas else []
-            for row in filas_r:
-                old = self.db.query_one("SELECT id FROM rangos_morosidad WHERE codigo=?",
-                                        (norm_key(row["codigo"]).upper().replace(" ", "_"),))
-                cid = rid("rangos_morosidad", row["id"]) or (old["id"] if old else None)
-                try:
-                    self.save_rango_morosidad(dict(row, activo=si(row["activo"]) if s(row["activo"]) else 1), cid,
-                                              validar_conjunto=False)
-                    n += 1
-                except ValueError as e:
-                    rep["avisos"].append(f"Rangos_Morosidad fila {row['_fila']}: {e}")
-            if filas_r:
-                rep["avisos"].extend(self.validar_rangos_morosidad())
-                rep["Rangos de morosidad"] = n
 
             # --- Costos de referencia
             n = 0

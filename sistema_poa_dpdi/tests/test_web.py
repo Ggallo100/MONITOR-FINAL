@@ -268,54 +268,6 @@ class WebTest(unittest.TestCase):
         self.assertIn("#123456", html)  # un color personalizado por la DPDI se respeta
         self.assertRegex(html, r"css/app\.css\?v=\d+")
 
-    def test_rangos_de_morosidad(self):
-        self.assertEqual(self.admin.get("/admin/morosidad").status_code, 200)
-        rangos = {r["codigo"]: r for r in self.api(self.admin, "GET", "/api/admin/t/morosidad")["rows"]}
-        self.assertEqual([(r["dias_desde"], r["dias_hasta"], r["tratamiento"]) for r in rangos.values()],
-                         [(0, 30, "Desfase de cobro"), (31, 180, "Desfase de cobro"), (181, None, "Provisión")])
-        for cod, tasa in (("TEMPRANA", "8%"), ("INTERMEDIA", "4%"), ("DURA", "3%")):
-            self.api(self.admin, "PUT", f"/api/admin/t/morosidad/{rangos[cod]['id']}", dict(rangos[cod], tasa_pct=tasa))
-        # validaciones: solape y suma de tasas
-        self.api(self.admin, "POST", "/api/admin/t/morosidad",
-                 {"codigo": "X", "nombre": "Solapado", "dias_desde": 20, "dias_hasta": 40, "activo": 1}, codigo=400)
-        self.api(self.admin, "PUT", f"/api/admin/t/morosidad/{rangos['DURA']['id']}",
-                 dict(rangos["DURA"], tasa_pct="95%"), codigo=400)
-        # la tasa única de Parámetros refleja la morosidad dura
-        prm = self.api(self.admin, "GET", "/api/admin/parametros")
-        self.assertAlmostEqual(prm["tasa_morosidad_pct"], 0.03)
-        # ingreso con morosidad: devengado completo, cobranza por rangos y provisión = incobrable
-        self.api(self.admin, "POST", "/api/fun/FI", {"partida": "PENSION PREGRADO", "cantidad": "100",
-                                                      "tarifa_moneda": "300", "becas_pct": "10%",
-                                                      "aplica_morosidad": "Sí", "sustento": "Histórico de recaudación",
-                                                      "meses": ["x"] * 12})
-        res = self.api(self.admin, "GET", "/api/resumen")
-        sec = next(x for x in res["secciones"] if x["key"] == "s2m")
-        totales = {fila[0].split(" (")[0]: fila[-1] for fila in sec["rows"]}
-        self.assertAlmostEqual(totales["Ingreso devengado"], 324000.0)
-        self.assertAlmostEqual(totales["Cobranza proyectada"] + totales["Por cobrar el año siguiente"]
-                               + totales["Incobrable dura"], 324000.0)
-        self.assertAlmostEqual(totales["Incobrable dura"], 324000.0 * 0.03)
-        self.api(self.admin, "POST", "/api/funcionamiento/correr", {"reemplazar": True})
-        prov = [r for r in self.api(self.admin, "GET", "/api/fun/FE")["rows"]
-                if r["partida"] == "CUENTAS POR COBRAR COMERCIALES - TERCEROS"]
-        self.assertEqual(len(prov), 1, "la plantilla debe insertar la provisión de cuentas por cobrar")
-        self.assertAlmostEqual(prov[0]["_total"], 324000.0 * 0.03, places=2)
-        # libro oficial con la hoja de cobranza y plantilla con la hoja de rangos (ida y vuelta)
-        import openpyxl
-        libro = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/libro").data))
-        self.assertIn("Morosidad_Cobranza", libro.sheetnames)
-        plantilla = self.admin.get("/descargas/plantilla-parametros").data
-        wb = openpyxl.load_workbook(io.BytesIO(plantilla))
-        ws = wb["Rangos_Morosidad"]
-        fila_dura = next(r for r in range(5, ws.max_row + 1) if ws.cell(r, 2).value == "DURA")
-        ws.cell(fila_dura, 6).value = 0.02
-        buf = io.BytesIO()
-        wb.save(buf)
-        rep = self.api(self.admin, "POST", "/cargas/plantilla-parametros",
-                       data={"archivo": (io.BytesIO(buf.getvalue()), "p.xlsx")}, content_type="multipart/form-data")
-        self.assertEqual(rep["Rangos de morosidad"], 3)
-        self.assertAlmostEqual(self.api(self.admin, "GET", "/api/admin/parametros")["tasa_morosidad_pct"], 0.02)
-
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
         self.assertIn("--primario: #123456", self.admin.get("/").get_data(as_text=True))

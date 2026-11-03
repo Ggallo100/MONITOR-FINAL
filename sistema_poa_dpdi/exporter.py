@@ -25,7 +25,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from catalogs_seed import CATEGORIAS_EGR_RESUMEN, CATEGORIAS_ING_RESUMEN, UNIDADES_MEDIDA
-from controllers import POAController, fmt_money, fmt_pct, norm_key, rango_dias, s, to_float
+from controllers import POAController, fmt_money, fmt_pct, norm_key, s, to_float
 from database import MCOLS, MESES
 
 # =============================================================================
@@ -247,45 +247,13 @@ class OfficialWorkbookExporter:
         if incluir_bd:
             rows = self.c.consolidated_rows([self.uid])
             write_bd_sheet(wb.create_sheet("BD_CONSOLIDADA_NIIF"), rows)
-        self._morosidad(wb.create_sheet("Morosidad_Cobranza"))  # anexo: después de las hojas oficiales y la BD
         for ws in wb.worksheets:
             ws.sheet_view.zoomScale = 90
-            if ws.title not in ("Instrucciones", "Ficha_Resumen", "Parámetros", "Hoja6", "BD_CONSOLIDADA_NIIF",
-                                "Morosidad_Cobranza"):
+            if ws.title not in ("Instrucciones", "Ficha_Resumen", "Parámetros", "Hoja6", "BD_CONSOLIDADA_NIIF"):
                 ws.freeze_panes = "B7"
         wb.calculation.fullCalcOnLoad = True
         wb.save(path)
         return path
-
-    # --------------------------------------------------- Morosidad y cobranza
-    def _morosidad(self, ws):
-        """Rangos de morosidad vigentes y cobranza proyectada de Funcionamiento_Ing (valores del sistema)."""
-        x = XL(ws)
-        x.title("MOROSIDAD Y COBRANZA PROYECTADA", "Rangos por días de atraso definidos por la DPDI. "
-                "Desfase de cobro: se cobra N meses después. Provisión: incobrable, se registra como gasto.")
-        x.headers(5, ["Rango (código)", "Días de atraso", "Tasa (%)", "Tratamiento", "Meses de desfase", "Descripción"])
-        ws.merge_cells("F5:N5")
-        r = 6
-        for g in self.p.rangos:
-            x.put(f"A{r}", f"{g['nombre']} ({g['codigo']})", "plain")
-            x.put(f"B{r}", rango_dias(g), "plain")
-            x.put(f"C{r}", g["tasa_pct"] or 0.0, "plain", PCT)
-            x.put(f"D{r}", g["tratamiento"], "plain")
-            x.put(f"E{r}", g["meses_desfase"] if g["tratamiento"] != "Provisión" else "—", "plain", INT)
-            x.put(f"F{r}", g["descripcion"], "plain")
-            ws.merge_cells(f"F{r}:N{r}")
-            r += 1
-        sec = next(s_ for s_ in self.summary["sections"] if s_["key"] == "s2m")
-        r += 1
-        ws.cell(r, 1, sec["title"]).font = F_GRP
-        r += 1
-        x.headers(r, sec["headers"])
-        for i, fila in enumerate(sec["rows"]):
-            r += 1
-            for j, v in enumerate(fila):
-                x.put(f"{col(j + 1)}{r}", v, "total" if i in sec["totals"] else "plain", None if j == 0 else MONEY)
-        ws.cell(r + 2, 1, sec["note"]).font = F_SUB
-        x.widths({"A": 50, **{col(k): 14 for k in range(2, 15)}})
 
     # ------------------------------------------------------------ Parámetros
     def _parametros(self, ws):
@@ -352,9 +320,8 @@ class OfficialWorkbookExporter:
              "Se aplica en Funcionamiento_Egr a las filas con «Aplica reajuste = Sí»."),
             (26, "Mes desde el que se aplica el reajuste (1–12)", prm.get("mes_inicio_reajuste"), INT,
              "1 = enero … 12 = diciembre."),
-            (27, "Tasa de morosidad dura / incobrable (%)", prm.get("tasa_morosidad_pct"), PCT,
-             "Suma de los rangos con tratamiento «Provisión» (hoja Morosidad_Cobranza). Base de la provisión de "
-             "cuentas por cobrar; no reduce el ingreso."),
+            (27, "Tasa de morosidad proyectada (%)", prm.get("tasa_morosidad_pct"), PCT,
+             "Se descuenta en Funcionamiento_Ing a las filas con «Aplica morosidad = Sí»."),
             (28, "Estudiantes proyectados — pregrado", prm.get("estudiantes_pregrado"), INT,
              "Referencia para las cantidades de Funcionamiento_Ing."),
             (29, "Estudiantes proyectados — posgrado", prm.get("estudiantes_posgrado"), INT, ""),
@@ -709,13 +676,13 @@ class OfficialWorkbookExporter:
                 "concepto y programa o servicio; marque con «x» los meses de cobro.")
         x.group(5, "A", "I", "Concepto y tarifa")
         x.group(5, "J", "V", "Meses de cobro (marque x)")
-        x.group(5, "W", "AH", "Ingreso mensual devengado, neto de becas (S/)")
+        x.group(5, "W", "AH", "Ingreso mensual neto calculado (S/)")
         x.group(5, "AI", "AK", "Ingreso anual (S/)")
         x.group(5, "AL", "AM", "Sustento")
         x.headers(6, ["Código", "Partida / rubro", "Categoría", "Cantidad proyectada", "Moneda",
                       "Tarifa por cobro (moneda)", "Tarifa por cobro (S/)", "Becas y descuentos (%)",
                       "¿Aplica morosidad?", *MESES, "Ingreso bruto anual (S/)", *[f"{m} (S/)" for m in MESES],
-                      "Ingreso neto anual (S/)", "Becas y descuentos (S/)", "Ingreso neto anual (S/)",
+                      "Ingreso neto anual (S/)", "Becas, descuentos y morosidad (S/)", "Ingreso neto anual (S/)",
                       "Sustento", "Observaciones"])
         x.widths({"A": 9, "B": 34, "C": 22, "D": 11, "E": 7, "F": 14, "G": 14, "H": 10, "I": 10,
                   **{col(10 + i): 7 for i in range(12)}, "V": 14, **{col(23 + i): 12 for i in range(12)},
@@ -731,7 +698,7 @@ class OfficialWorkbookExporter:
                 mc = col(10 + k)
                 x.put(f"{col(23 + k)}{r}",
                       f'=IF(OR($D{r}="",$G{r}="",{mc}{r}=""),0,$D{r}*$G{r}*IF({mc}{r}="x",1,N({mc}{r}))'
-                      f'*(1-IF($H{r}="",0,$H{r})))', kind, MONEY)
+                      f'*(1-IF($H{r}="",0,$H{r}))*(1-IF($I{r}="Sí",Morosidad,0)))', kind, MONEY)
             x.put(f"AI{r}", f"=SUM(W{r}:AH{r})", kind, MONEY)
             x.put(f"AJ{r}", f"=V{r}-AI{r}", kind, MONEY)
             x.put(f"AK{r}", f"=SUM(W{r}:AH{r})", kind, MONEY)
@@ -1292,7 +1259,7 @@ class OfficialWorkbookExporter:
         # ---- 2
         r = rc + 3
         x.group(r, "B", "G", "2. Ingresos proyectados")
-        x.headers(r + 1, ["Categoría", "N° de actividades", "Ingreso bruto (S/)", "Becas y descuentos (S/)",
+        x.headers(r + 1, ["Categoría", "N° de actividades", "Ingreso bruto (S/)", "Becas, descuentos y morosidad (S/)",
                           "Ingreso neto (S/)", "% del total"], 2)
         r2 = r + 2
         n2 = len(CATEGORIAS_ING_RESUMEN) + 2
@@ -1875,7 +1842,7 @@ def export_pdf(ctrl: POAController, uid: int, path: str | Path) -> Path:
             continue
         headers, fmts, rows = sec["headers"], sec["formats"], sec["rows"]
         ncols = len(headers)
-        if sec["key"] in ("s10", "s2m"):
+        if sec["key"] == "s10":
             widths = [page_w * 0.19] + [page_w * 0.81 / 13] * 13
         else:
             first = 0.34 if ncols > 4 else 0.45
@@ -2005,7 +1972,6 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
         ("TL_Cat", "Categorías presupuestales", categorias),
         ("TL_Macro2", "Macrogrupo de la plantilla", ["*"] + ctrl.macrogrupos()),
         ("TL_TipoFun", "Tipo (plantilla)", ["Egresos", "Ingresos"]),
-        ("TL_Trat", "Tratamiento de morosidad", ["Desfase de cobro", "Provisión"]),
     ]
     for j, (name, title, values) in enumerate(listas, start=1):
         c = ws_l.cell(1, j, title)
@@ -2117,19 +2083,6 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
     ws.conditional_formatting.add(f"{c_eje}5:{c_oe}{last}",
                                   CellIsRule(operator="equal", formula=['"OE no existe"'], fill=FILL_BAD))
 
-    # ------------------------------------------------------ Rangos de morosidad
-    rows = []
-    for r in db.rangos_morosidad():
-        r = dict(r)
-        r["activo"] = "Sí" if r["activo"] else "No"
-        rows.append(r)
-    table(sheets["Rangos_Morosidad"], "RANGOS DE MOROSIDAD POR DÍAS DE ATRASO",
-          "Desfase de cobro: la parte del rango se cobra N meses después (no reduce el ingreso). Provisión: incobrable, "
-          "se registra como gasto. Los rangos activos no deben superponerse y sus tasas no pueden sumar más de 100 %.",
-          rows, {"codigo": 14, "nombre": 32, "dias_desde": 14, "dias_hasta": 18, "tasa_pct": 14, "tratamiento": 22,
-                 "meses_desfase": 12, "descripcion": 70, "orden": 8, "activo": 10},
-          {"tasa_pct": PCT}, {"tratamiento": "TL_Trat", "activo": "TL_SiNo"})
-
     # ----------------------------------------------------- Costos de referencia
     table(sheets["Costos_Referencia"], "COSTOS UNITARIOS DE REFERENCIA",
           "Referencias para estimar costos cuando no se cuenta con cotización.", db.all("costos_referencia", order="id"),
@@ -2181,8 +2134,6 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
                                    "objetivo anual (OBJ) indique su Eje y su OE: así se arma la lista dependiente "
                                    "Eje → Objetivo anual → OE (automático). Las acciones estratégicas (AE) ya no se "
                                    "usan."),
-        ("Rangos_Morosidad", "Rangos por días de atraso (temprana, intermedia, dura) con su tasa, tratamiento "
-                             "(desfase de cobro o provisión) y meses de desfase."),
         ("Costos_Referencia", "Costos unitarios referenciales por concepto."),
         ("Plantilla_Funcionamiento", "Filas que inserta el botón «Correr Actividades de Funcionamiento»."),
         ("Listas", "Valores de las listas desplegables (se generan al descargar la plantilla)."),

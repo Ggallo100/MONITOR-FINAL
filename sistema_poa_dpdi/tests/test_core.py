@@ -52,32 +52,15 @@ class CalculosTest(unittest.TestCase):
         self.assertEqual(c["n_pagos"], 2)
         self.assertEqual(c["control"], "OK")
 
-    def test_ingresos_becas_y_morosidad_por_rangos(self):
-        rangos = [dict(codigo="TEMPRANA", tasa_pct=0.10, tratamiento="Desfase de cobro", meses_desfase=1),
-                  dict(codigo="INTERMEDIA", tasa_pct=0.05, tratamiento="Desfase de cobro", meses_desfase=4),
-                  dict(codigo="DURA", tasa_pct=0.05, tratamiento="Provisión", meses_desfase=0)]
-        p = Params(morosidad=0.05, rangos=rangos)
+    def test_ingresos_becas_y_morosidad(self):
+        p = Params(morosidad=0.05)
         r = dict(cantidad=100, moneda="S/", tarifa_moneda=500, becas_pct=0.10, aplica_morosidad="Sí",
                  **months([None, None, "x", "x", "x", "x", "x"] + [None] * 5))
         c = calc_fing(r, p)
         self.assertAlmostEqual(c["bruto"], 250000.0)
-        self.assertAlmostEqual(c["neto"], 225000.0)            # devengado: solo descuenta becas
-        self.assertAlmostEqual(c["descuentos"], 25000.0)
+        self.assertAlmostEqual(c["neto"], 250000 * 0.9 * 0.95)
+        self.assertAlmostEqual(c["descuentos"], 250000 - 250000 * 0.9 * 0.95)
         self.assertEqual(c["n_meses"], 5)
-        self.assertAlmostEqual(c["incobrable"], 225000 * 0.05)  # va a la provisión, no reduce el ingreso
-        self.assertAlmostEqual(c["cobranza_total"], 225000 * 0.95)
-        self.assertAlmostEqual(c["cobranza"][2], 45000 * 0.80)  # marzo: solo cobro oportuno
-        self.assertAlmostEqual(c["cobranza"][3], 45000 * 0.80 + 45000 * 0.10)  # abril: + temprana de marzo
-        self.assertAlmostEqual(c["cobranza"][7], 45000 * 0.10 + 45000 * 0.05)  # agosto: temprana jul + intermedia abr
-        self.assertAlmostEqual(c["por_cobrar_siguiente"], 0.0)
-        # cobro en diciembre: la temprana y la intermedia pasan al año siguiente
-        r2 = dict(r, **months([None] * 11 + ["x"]))
-        c2 = calc_fing(r2, p)
-        self.assertAlmostEqual(c2["por_cobrar_siguiente"], 45000 * 0.15)
-        self.assertAlmostEqual(c2["cobranza_total"] + c2["por_cobrar_siguiente"] + c2["incobrable"], c2["neto"])
-        # sin «Aplica morosidad» se cobra todo en el mes
-        c3 = calc_fing(dict(r, aplica_morosidad="No"), p)
-        self.assertEqual(c3["cobranza"], c3["meses"])
 
     def test_utilidades(self):
         self.assertEqual(parse_pct("10%"), 0.10)
@@ -140,9 +123,7 @@ class FlujoCompletoTest(unittest.TestCase):
         summ = self.c.build_summary(self.uid)
         s1 = summ["s1"]
         self.assertAlmostEqual(s1["ini"][1], 3500.0)
-        self.assertAlmostEqual(s1["fun"][0], 100 * 300 * 10 * 0.9)  # la morosidad ya no reduce el ingreso
-        dura = next(r for r in self.db.rangos_morosidad() if r["codigo"] == "DURA")
-        self.assertAlmostEqual(dura["tasa_pct"], 0.05)  # la tasa única se sincroniza con la morosidad dura
+        self.assertAlmostEqual(s1["fun"][0], 100 * 300 * 10 * 0.9 * 0.95)
         self.assertAlmostEqual(s1["fun"][1], 2400.0)
         self.assertAlmostEqual(s1["oo"][1], 6000.0)
         self.assertEqual(s1["rows"][2][6], "Excede techo")
@@ -224,8 +205,8 @@ class FlujoCompletoTest(unittest.TestCase):
         path = export_plantilla_parametros(self.c, Path(self.tmp.name) / "plantilla.xlsx")
         wb = openpyxl.load_workbook(path)
         self.assertEqual(wb.sheetnames, ["Instrucciones", "Datos_Generales", "Unidades_Techos",
-                                         "Cuentas_NIIF_Partidas_GG", "Catalogos_Estrategicos", "Rangos_Morosidad",
-                                         "Costos_Referencia", "Plantilla_Funcionamiento", "Listas"])
+                                         "Cuentas_NIIF_Partidas_GG", "Catalogos_Estrategicos", "Costos_Referencia",
+                                         "Plantilla_Funcionamiento", "Listas"])
         ws = wb["Catalogos_Estrategicos"]
         r = 5
         while ws.cell(r, 2).value:

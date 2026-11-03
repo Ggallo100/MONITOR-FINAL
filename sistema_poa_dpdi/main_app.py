@@ -967,7 +967,7 @@ class ParametrosTab(ctk.CTkFrame):
             Field("tipo_cambio", "Tipo de cambio (S/ por US$)"), Field("valor_uit", "Valor UIT (S/)"),
             Field("rmv", "Remuneración mínima vital (S/)"), Field("reajuste_remunerativo_pct", "Reajuste remunerativo (%)"),
             Field("mes_inicio_reajuste", "Mes de reajuste (1–12)", "combo", [str(i) for i in range(1, 13)]),
-            Field("tasa_morosidad_pct", "Tasa de morosidad dura / incobrable (%)"),
+            Field("tasa_morosidad_pct", "Tasa de morosidad (%)"),
             Field("estudiantes_pregrado", "Estudiantes pregrado"), Field("estudiantes_posgrado", "Estudiantes posgrado"),
             Field("pension_ref_pregrado", "Pensión ref. pregrado (S/)"),
             Field("pension_ref_posgrado", "Pensión ref. posgrado (S/)"),
@@ -1713,7 +1713,7 @@ class FlatTab(ctk.CTkFrame):
         self.months.pack(fill="x", pady=4)
         if fi:
             calc = [Field("_bruto", "Ingreso bruto anual (S/)", "calc", width=150),
-                    Field("_desc", "Becas y descuentos (S/)", "calc", width=150),
+                    Field("_desc", "Becas, descuentos y morosidad (S/)", "calc", width=150),
                     Field("_neto", "Ingreso neto anual (S/)", "calc", width=150),
                     Field("_n", "N° de meses de cobro", "calc", width=150)]
         else:

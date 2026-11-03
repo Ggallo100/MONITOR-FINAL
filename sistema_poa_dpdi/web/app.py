@@ -27,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.4"
+VERSION_APP = "2.3"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
@@ -347,9 +347,7 @@ def _fila_flat(kind: str, r: dict) -> dict:
     out = _limpio(r)
     out["meses"] = [r[m] for m in MCOLS]
     if kind == "FI":
-        out.update(_soles=cc["tarifa_soles"], _bruto=cc["bruto"], _desc=cc["descuentos"], _neto=cc["neto"],
-                   _cobranza=fmt_money(cc["cobranza_total"]), _siguiente=fmt_money(cc["por_cobrar_siguiente"]),
-                   _incobrable=fmt_money(cc["incobrable"]))
+        out.update(_soles=cc["tarifa_soles"], _bruto=cc["bruto"], _desc=cc["descuentos"], _neto=cc["neto"])
     else:
         out.update(_soles=cc["costo_unit_soles"], _coste=cc["coste_total"], _total=cc["total"],
                    _control=cc["control"], _n=cc["n_pagos"])
@@ -862,8 +860,6 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
             out = {"_categoria": c.categoria_de(d.get("partida", ""), "Ingresos"),
                    "_soles": fmt_money(cc["tarifa_soles"]), "_bruto": fmt_money(cc["bruto"]),
                    "_desc": fmt_money(cc["descuentos"]), "_neto": fmt_money(cc["neto"]),
-                   "_cobranza": fmt_money(cc["cobranza_total"]), "_siguiente": fmt_money(cc["por_cobrar_siguiente"]),
-                   "_incobrable": fmt_money(cc["incobrable"]),
                    "meses_calc": [fmt_money(v) if v else "" for v in cc["meses"]]}
         elif tipo == "FE":
             cc = calc_fegr(d, p)
@@ -1176,14 +1172,6 @@ def _admin_rows(entidad: str) -> list[dict]:
         return db().catalogo(request.args.get("tipo", "EJE"))
     if entidad == "costos":
         return db().all("costos_referencia", order="id")
-    if entidad == "morosidad":
-        from controllers import rango_dias
-        rows = db().rangos_morosidad()
-        for r in rows:
-            r["_dias"] = rango_dias(r)
-            r["_meses"] = "—" if r["tratamiento"] == "Provisión" else \
-                f"+{r['meses_desfase']} {'mes' if r['meses_desfase'] == 1 else 'meses'}"
-        return rows
     if entidad == "plantilla":
         areas = {u["id"]: u["codigo_area"] for u in c.unidades()}
         rows = db().all("plantilla_funcionamiento", order="unidad_id IS NOT NULL, unidad_id, orden, id")
@@ -1222,9 +1210,6 @@ def _admin_save(entidad: str, d: dict, rid: Optional[int]) -> int:
         else:
             data["eje"], data["padre"] = "", ""
         return c.save_catalogo(tipo, data, rid)
-    if entidad == "morosidad":
-        d["activo"] = 1 if d.get("activo") in (1, True, "1", "on") else 0
-        return c.save_rango_morosidad(d, rid)
     if entidad == "costos":
         if not s(d.get("concepto")):
             raise ValueError("El concepto es obligatorio.")
@@ -1452,8 +1437,6 @@ def _admin_delete(entidad: str, rid: int) -> None:
         db().delete("catalogos_estrategicos", rid)
     elif entidad == "costos":
         db().delete("costos_referencia", rid)
-    elif entidad == "morosidad":
-        c.delete_rango_morosidad(rid)
     elif entidad == "plantilla":
         db().delete("plantilla_funcionamiento", rid)
     elif entidad == "usuarios":

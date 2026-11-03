@@ -490,7 +490,7 @@
       const i = r.info;
       $("#f-info").innerHTML = kind === "FE"
         ? techoHtml(i.techo, "Techo de funcionamiento") + `<div class="nota">Reajuste ${POA.fmt(i.reajuste, "pct")} desde ${esc(i.mes_reajuste)} en filas con «Aplica reajuste = Sí».</div>`
-        : `<div class="techo"><strong>Ingreso neto anual devengado S/ ${POA.fmt(r.rows.reduce((a, x) => a + (x._neto || 0), 0), "money")}</strong> · Meta S/ ${POA.fmt(i.meta_ingresos, "money")} · Morosidad incobrable (provisión) ${POA.fmt(i.morosidad, "pct")} · <a href="/resumen">ver cobranza (2.1)</a></div>`;
+        : `<div class="techo"><strong>Ingreso neto anual S/ ${POA.fmt(r.rows.reduce((a, x) => a + (x._neto || 0), 0), "money")}</strong> · Meta S/ ${POA.fmt(i.meta_ingresos, "money")} · Morosidad ${POA.fmt(i.morosidad, "pct")}</div>`;
       grid.setRows(r.rows);
       if (sel && grid.get(sel)) { grid.select(sel); rid = sel; } else nuevo();
     }
