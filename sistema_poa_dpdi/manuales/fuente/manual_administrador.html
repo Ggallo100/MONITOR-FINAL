@@ -40,7 +40,7 @@
     <li><a href="#c9">Costos de referencia y plantilla de funcionamiento</a></li>
     <li><a href="#c10">Usuarios y accesos</a></li>
     <li><a href="#c11">Tablero DPDI y revisión de fichas</a></li>
-    <li><a href="#c12">Consolidación y reportes</a></li>
+    <li><a href="#c12">Consolidación y carga masiva</a></li>
     <li><a href="#c13">Bitácora y respaldos</a></li>
     <li><a href="#c14">Cierre del proceso y buenas prácticas</a></li>
   </ol>
@@ -229,16 +229,29 @@
   <code>administrar_usuarios.py</code> (ver Manual técnico).</div>
 
 <h1 class="cap" id="c11"><span class="num">11</span>Tablero DPDI y revisión de fichas</h1>
-<p>El <b>Tablero DPDI</b> resume, por unidad, el estado de la ficha, los montos registrados frente a los techos, las directrices pendientes
-  y la fecha del último cambio. Use el buscador para filtrar y haga clic en una unidad para abrirla.</p>
-<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 9.</b> Tablero DPDI.</figcaption></figure>
-<h2>Revisar una ficha enviada</h2>
+<p>La revisión se hace <b>por ficha de unidad</b>: la DPDI aprueba u observa el conjunto de actividades que la unidad formuló
+  (iniciativas, funcionamiento, otras operativas, actividades propias e inversión).</p>
+<h2>Estados de la ficha</h2>
+<table class="libre">
+  <tr><th>Estado</th><th>Qué significa</th></tr>
+  <tr><td><span class="chip borrador">Borrador</span></td><td>La unidad está formulando. Todavía no la presenta.</td></tr>
+  <tr><td><span class="chip enviada">Enviada</span></td><td>El responsable pulsó «Enviar a revisión de la DPDI»: la unidad terminó y la ficha queda en solo lectura
+    para ella, <b>esperando la revisión de la DPDI</b>. Son las fichas pendientes de aprobar u observar.</td></tr>
+  <tr><td><span class="chip observada">Observada</span></td><td>La DPDI la devolvió con una observación; la unidad corrige y vuelve a enviar.</td></tr>
+  <tr><td><span class="chip aprobada">Aprobada</span></td><td>La DPDI la aprobó; queda cerrada para la unidad.</td></tr>
+</table>
+<h2>Dónde aprobar u observar</h2>
 <ol class="pasos">
-  <li>Seleccione la unidad (desde el tablero o la barra de unidad).</li>
-  <li>Revise la <b>Ficha resumen</b> y el semáforo de directrices; descargue el libro Excel o el PDF si necesita revisar fuera de línea.</li>
-  <li>En <b>Inicio → Estado de la ficha</b> elija la acción:</li>
+  <li>Abra <b>Tablero DPDI</b>. Pulse el indicador <b>«Enviadas (por revisar)»</b> para ver solo las fichas pendientes.</li>
+  <li>Haga clic en la unidad. Se abre la ventana <b>Revisión de la ficha</b> con su estado, la observación vigente, las directrices a revisar y el
+    consumo del techo.</li>
+  <li>Use <b>Ver ficha resumen</b> para revisar el detalle (o descargue el libro Excel o el PDF desde la barra de la unidad).</li>
+  <li>Vuelva al tablero, haga clic en la unidad y elija <b>Aprobar</b>, <b>Observar</b> (escriba la observación, es obligatoria) o
+    <b>Reabrir (borrador)</b>.</li>
 </ol>
-<figure class="media"><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 10.</b> Acciones de revisión del administrador.</figcaption></figure>
+<figure><img src="../img/a01_tablero.png"><figcaption><b>Figura 9.</b> Tablero DPDI filtrado por fichas enviadas, con la exportación institucional.</figcaption></figure>
+<figure><img src="../img/a09_revision_ficha.png"><figcaption><b>Figura 10.</b> Ventana de revisión de la ficha.</figcaption></figure>
+<p>Las mismas acciones están en <b>Inicio → Estado de la ficha</b> de cada unidad.</p>
 <table class="libre">
   <tr><th>Acción</th><th>Desde</th><th>Resultado</th></tr>
   <tr><td>Aprobar</td><td>Enviada</td><td>La ficha queda <span class="chip aprobada">Aprobada</span> y en solo lectura para la unidad.</td></tr>
@@ -247,12 +260,31 @@
 </table>
 <div class="tip"><b>Observaciones útiles</b>Escriba observaciones concretas: hoja, código y qué corregir (por ejemplo «INI-03: falta sustento de la partida Pasajes»).</div>
 
-<h1 class="cap" id="c12"><span class="num">12</span>Consolidación y reportes</h1>
+<h1 class="cap" id="c12"><span class="num">12</span>Consolidación y carga masiva</h1>
+<h2>Libro consolidado + BD NIIF (todas las unidades)</h2>
+<p>En <b>Tablero DPDI → Exportación institucional (carga masiva)</b> (solo rol Administrador DPDI):</p>
+<ol class="pasos">
+  <li>En <b>Fichas a incluir</b> elija <b>Todas las unidades</b> o <b>Solo fichas aprobadas</b> (recomendado para la carga oficial).</li>
+  <li>Pulse <b>Libro consolidado + BD NIIF (.xlsx)</b> o, si el sistema de gestión requiere texto plano, <b>BD NIIF para carga masiva (.csv)</b>
+    (UTF-8, separador «;»).</li>
+</ol>
+<table class="libre">
+  <tr><th>Hoja del libro consolidado</th><th>Contenido</th></tr>
+  <tr><td>Resumen_Unidades</td><td>Una fila por unidad: estado de la ficha, fecha y usuario de la revisión, observación, ingresos, egresos, resultado, inversión y directrices a revisar.</td></tr>
+  <tr><td>Iniciativas, Otras_Operativas, Actividades_Propias, Inversiones</td><td>Registros maestros de todas las unidades (incluye el tipo de actividad comercial de Marketing).</td></tr>
+  <tr><td>Detalle_*</td><td>Partidas de cada actividad con montos mensuales en soles.</td></tr>
+  <tr><td>Funcionamiento_Ing / Funcionamiento_Egr</td><td>Ingresos y egresos de funcionamiento con montos mensuales.</td></tr>
+  <tr><td>BD_CONSOLIDADA_NIIF</td><td>Tabla plana: una fila por concepto y mes, con código de área, actividad, cuenta NIIF, partida, categoría, monto y Estado_Ficha.</td></tr>
+</table>
+<p>Todas las hojas empiezan con <code>Anio</code>, <code>Codigo_Area</code>, <code>Centro_Costo</code>, <code>Unidad_Organica</code>, <code>Macrogrupo</code>
+  y <code>Estado_Ficha</code>, tienen encabezados técnicos estables y están en formato de tabla de Excel, para que Tecnología pueda mapearlas a la
+  carga masiva del sistema de gestión.</p>
+<h2>Otros reportes</h2>
 <table class="libre">
   <tr><th>Reporte</th><th>Dónde</th><th>Contenido</th></tr>
   <tr><td>Libro oficial + BD NIIF</td><td>Barra de la unidad</td><td>Ficha de Formulación de la unidad seleccionada en el formato oficial (16 hojas) más la hoja BD_CONSOLIDADA_NIIF.</td></tr>
   <tr><td>Ficha resumen (PDF)</td><td>Barra de la unidad</td><td>12 secciones y espacios de firma.</td></tr>
-  <tr><td>BD NIIF consolidada de todas las unidades</td><td>Parámetros → Reportes y respaldo</td><td>Una fila por concepto y mes de todas las unidades, con cuenta NIIF, categoría y partida, lista para tablas dinámicas o Power BI.</td></tr>
+  <tr><td>Libro consolidado + BD NIIF</td><td>Parámetros → Reportes y respaldo</td><td>El mismo libro de todas las unidades del tablero.</td></tr>
   <tr><td>Respaldo completo</td><td>Parámetros → Reportes y respaldo</td><td>Copia de la base de datos (archivo .sqlite3) para archivo o restauración por Tecnología.</td></tr>
 </table>
 

@@ -105,6 +105,14 @@ comercial (Marketing)* (catálogo `ACT_COM`): renombrar actualiza los registros 
 uso. Se exporta en `Otras_Operat` (columna K), en la BD consolidada (`Tipo_Actividad_Comercial`) y en la sección 6.1
 de la Ficha resumen de esas unidades.
 
+### Revisión de fichas y exportación institucional
+
+*Tablero DPDI*: clic en una unidad abre la ventana de revisión (Aprobar, Observar con comentario, Reabrir). El
+indicador «Enviadas (por revisar)» filtra las fichas pendientes. La tarjeta *Exportación institucional* (rol
+ADMIN) descarga el **libro consolidado + BD NIIF** de todas las unidades o solo de las aprobadas
+(`/descargas/consolidado?estado=todas|aprobadas`, `&formato=csv` para la BD en CSV `;` UTF-8): resumen por unidad,
+maestros, detalles, funcionamiento y `BD_CONSOLIDADA_NIIF` con `Estado_Ficha`, listos para la carga masiva.
+
 ### Manuales y soporte
 
 Los manuales en PDF están en `manuales/pdf/` y se publican en la página **Ayuda** del sistema según el rol:

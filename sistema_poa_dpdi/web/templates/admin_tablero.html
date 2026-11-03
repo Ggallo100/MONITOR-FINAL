@@ -3,6 +3,19 @@
 {% block contenido %}
 <div class="titulo-pagina"><h1>Tablero de seguimiento DPDI</h1><p>Estado de las fichas, consumo de techos y directrices observadas en todas las unidades.</p></div>
 <div id="t-kpis" class="kpis"></div>
+{% if es_admin %}
+<section class="tarjeta">
+  <h2>Exportación institucional (carga masiva)</h2>
+  <p class="nota">Libro consolidado con <strong>todas las actividades de todas las unidades</strong>: resumen por unidad, maestros y detalles
+    (iniciativas, otras operativas, actividades propias, inversiones), funcionamiento y la <strong>BD_CONSOLIDADA_NIIF</strong> mensualizada
+    para la carga masiva al sistema de gestión de la universidad.</p>
+  <div class="fila-form">
+    <label>Fichas a incluir <select id="t-alcance"><option value="todas">Todas las unidades</option><option value="aprobadas">Solo fichas aprobadas</option></select></label>
+    <a class="btn btn-primario" id="t-libro" href="/descargas/consolidado?estado=todas">⬇ Libro consolidado + BD NIIF (.xlsx)</a>
+    <a class="btn" id="t-csv" href="/descargas/consolidado?estado=todas&amp;formato=csv">⬇ BD NIIF para carga masiva (.csv)</a>
+  </div>
+</section>
+{% endif %}
 <section class="tarjeta"><input class="buscador" id="t-buscar" placeholder="Buscar unidad, macrogrupo, responsable o estado…"><div id="t-tabla" class="tabla-scroll alto"></div></section>
 {% endblock %}
-{% block scripts %}<script>POA.paginaTablero();</script>{% endblock %}
+{% block scripts %}<script>POA.paginaTablero({{ 'true' if es_admin else 'false' }});</script>{% endblock %}

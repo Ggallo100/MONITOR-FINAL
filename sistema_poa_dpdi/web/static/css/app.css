@@ -267,3 +267,9 @@ pre { white-space: pre-wrap; font-size: 12px; }
 /* Botones del formulario siempre visibles */
 .panel-form .botones { position: sticky; bottom: 0; background: #fff; padding: 10px 0 4px; border-top: 1px solid var(--divisor); z-index: 2; }
 code.clave { font-size: 1.25em; padding: 4px 8px; background: var(--crema); border-radius: 4px; user-select: all; }
+
+/* KPI del tablero que filtran la tabla */
+.kpi-filtro { cursor: pointer; }
+.kpi-filtro:hover { outline: 2px solid var(--primario); }
+label.bloque { display: block; margin: 8px 0; font-weight: 600; }
+label.bloque textarea { display: block; width: 100%; margin-top: 6px; font: inherit; padding: 8px; border: 1px solid var(--divisor); border-radius: 6px; }

@@ -27,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.5"
+VERSION_APP = "2.6"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
@@ -36,7 +36,7 @@ if str(BASE) not in sys.path:
 from controllers import (DETAIL_TABLE, FLAT_TABLE, MASTER_TABLE, POAController, calc_detalle, calc_fegr,  # noqa: E402
                          calc_fing, code_display, control_meta, es_marketing, fmt_money, parse_pct, s, to_float)
 from database import MCOLS, MESES, Database  # noqa: E402
-from exporter import (export_bd_consolidada, export_libro_oficial, export_pdf,  # noqa: E402
+from exporter import (export_bd_consolidada, export_bd_csv, export_libro_consolidado, export_libro_oficial, export_pdf,  # noqa: E402
                       export_plantilla_parametros)
 from web import schemas  # noqa: E402
 
@@ -987,7 +987,8 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         for u in sorted(c.unidades(), key=lambda x: s(x["codigo_area"])):
             fila = {"id": u["id"], "unidad": c.unidad_display(u), "macrogrupo": u["macrogrupo"],
                     "responsables": ", ".join(responsables.get(u["id"], [])), "estado": u["estado_ficha"] or "Borrador",
-                    "estado_fecha": u["estado_fecha"], "techo": 0.0, "egresos": 0.0, "uso": None, "ingresos": 0.0,
+                    "estado_fecha": u["estado_fecha"], "estado_obs": u["estado_obs"] or "",
+                    "estado_usuario": u["estado_usuario"] or "", "techo": 0.0, "egresos": 0.0, "uso": None, "ingresos": 0.0,
                     "capex": 0.0, "techo_capex": u["techo_inversion"] or 0.0, "revisar": 0, "con_datos": False}
             if u["id"] in con_datos:
                 summ = c.build_summary(u["id"])
@@ -1030,6 +1031,26 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         export_bd_consolidada(ctrl(), uids, tmp, with_csv=False)
         log("Descargar BD NIIF", "todas" if todas else str(uids[0]))
         return _enviar(tmp, f"BD_CONSOLIDADA_NIIF_{ctrl().anio}{'' if todas else '_' + ctrl().unidad(uids[0])['codigo_area']}.xlsx")
+
+    @app.get("/descargas/consolidado")
+    def desc_consolidado():
+        """Libro consolidado + BD NIIF de todas las unidades (o solo las fichas aprobadas) para carga masiva."""
+        _solo_admin()
+        solo_aprobadas = request.args.get("estado") == "aprobadas"
+        uids = [u["id"] for u in ctrl().unidades()
+                if not solo_aprobadas or (u.get("estado_ficha") or "Borrador") == "Aprobada"]
+        if not uids:
+            raise ValueError("No hay fichas aprobadas para exportar." if solo_aprobadas else "No hay unidades.")
+        sufijo = "_aprobadas" if solo_aprobadas else "_todas"
+        if request.args.get("formato") == "csv":
+            tmp = Path(tempfile.mkdtemp(prefix="poa_")) / "bd.csv"
+            export_bd_csv(ctrl(), uids, tmp)
+            log("Descargar BD NIIF consolidada (CSV)", f"{len(uids)} unidades{sufijo}")
+            return _enviar(tmp, f"BD_CONSOLIDADA_NIIF_{ctrl().anio}{sufijo}.csv")
+        tmp = Path(tempfile.mkdtemp(prefix="poa_")) / "consolidado.xlsx"
+        export_libro_consolidado(ctrl(), uids, tmp)
+        log("Descargar libro consolidado + BD NIIF", f"{len(uids)} unidades{sufijo}")
+        return _enviar(tmp, f"Libro_Consolidado_POA_{ctrl().anio}{sufijo}.xlsx")
 
     @app.get("/descargas/plantilla-parametros")
     def desc_plantilla():

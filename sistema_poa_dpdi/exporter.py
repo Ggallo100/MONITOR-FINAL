@@ -1785,6 +1785,161 @@ def export_bd_consolidada(ctrl: POAController, uids: Iterable[int], path: str | 
     return out
 
 
+# =============================================================================
+# Libro consolidado institucional (todas las unidades) para carga masiva
+# =============================================================================
+_OMITIR = {"id", "unidad_id", "master_id", "anio", "orden", "origen_plantilla", *MCOLS}
+_HOJAS_MAESTRO = (("INI", "Iniciativas", "Detalle_Iniciativas"), ("OO", "Otras_Operativas", "Detalle_Otras_Operativas"),
+                  ("AP", "Actividades_Propias", "Detalle_Act_Propias"), ("INV", "Inversiones", "Detalle_Inversiones"))
+
+
+def _hoja_tabla(wb, nombre: str, headers: list[str], filas: list[list], money_desde: Optional[int] = None):
+    """Hoja con encabezado fijo y tabla de Excel (facilita la carga masiva y los filtros)."""
+    ws = wb.create_sheet(nombre)
+    for j, h in enumerate(headers, start=1):
+        c = ws.cell(1, j, h)
+        c.font, c.fill, c.alignment = F_HDR, FILL_HDR, CENTER
+        ws.column_dimensions[col(j)].width = max(11, min(42, len(h) + 4))
+    for i, fila in enumerate(filas, start=2):
+        for j, v in enumerate(fila, start=1):
+            c = ws.cell(i, j, v)
+            if isinstance(v, float) and money_desde and j >= money_desde:
+                c.number_format = MONEY
+    ws.freeze_panes = "A2"
+    if filas:
+        tabla = Table(displayName=nombre.replace("-", "_"), ref=f"A1:{col(len(headers))}{len(filas) + 1}")
+        tabla.tableStyleInfo = TableStyleInfo(name="TableStyleLight9", showRowStripes=True)
+        ws.add_table(tabla)
+    return ws
+
+
+def export_libro_consolidado(ctrl: POAController, uids: Iterable[int], path: str | Path) -> Path:
+    """Libro institucional con todas las actividades de las unidades indicadas (una hoja por tipo, con el código de
+    área en cada fila) y la BD_CONSOLIDADA_NIIF mensualizada, lista para la carga masiva al sistema de gestión."""
+    path = Path(path)
+    uids = list(uids)
+    anio = ctrl.anio
+    datos = [(uid, ctrl.load_unit_data(uid)) for uid in uids]
+    wb = Workbook()
+    ws0 = wb.active
+    ws0.title = "Resumen_Unidades"
+    ctx_h = ["Anio", "Codigo_Area", "Centro_Costo", "Unidad_Organica", "Macrogrupo", "Estado_Ficha"]
+
+    def ctx(u):
+        return [anio, u["codigo_area"], u["centro_costo"], u["nombre_unidad"], u["macrogrupo"],
+                u.get("estado_ficha") or "Borrador"]
+
+    # ---- Resumen por unidad
+    res_h = ctx_h + ["Fecha_Estado", "Revisado_Por", "Observacion_DPDI", "Ingresos_S", "Egresos_S", "Resultado_S",
+                     "Inversion_S", "Directrices_a_revisar"]
+    filas = []
+    for uid, d in datos:
+        u = d["unidad"]
+        summ = ctrl.build_summary(uid, d)
+        s1 = summ["s1"]
+        ing = sum(v[0] for k, v in s1.items() if k in ("ini", "fun", "oo", "ap"))
+        egr = sum(v[1] for k, v in s1.items() if k in ("ini", "fun", "oo", "ap"))
+        inv = s1["inv"][1]
+        revisar = sum(1 for x in summ.get("directrices", []) if x["resultado"] == "Revisar")
+        filas.append(ctx(u) + [u.get("estado_fecha") or "", u.get("estado_usuario") or "", u.get("estado_obs") or "",
+                               round(ing, 2), round(egr, 2), round(ing - egr, 2), round(inv, 2), revisar])
+    wb.remove(ws0)
+    _hoja_tabla(wb, "Resumen_Unidades", res_h, filas, money_desde=len(ctx_h) + 4)
+
+    # ---- Maestros y detalles
+    for kind, hoja_m, hoja_d in _HOJAS_MAESTRO:
+        claves_m, claves_d = [], []
+        for _uid, d in datos:
+            for m in d[kind]:
+                for k in m:
+                    if not k.startswith("_") and k not in _OMITIR and k not in claves_m:
+                        claves_m.append(k)
+                for dd in m["_detalle"]:
+                    for k in dd:
+                        if not k.startswith("_") and k not in _OMITIR and k not in claves_d:
+                            claves_d.append(k)
+        fm, fd = [], []
+        for _uid, d in datos:
+            u = d["unidad"]
+            for m in d[kind]:
+                fm.append(ctx(u) + [m.get(k) for k in claves_m] +
+                          [round(m["_ingresos"], 2), round(m["_egresos"], 2), round(m["_resultado"], 2)])
+                for dd in m["_detalle"]:
+                    c = dd["_c"]
+                    fd.append(ctx(u) + [m["codigo"]] + [dd.get(k) for k in claves_d] +
+                              [c.get("costo_unit_soles"), round(c.get("total") or 0.0, 2)] +
+                              [round(v, 2) for v in c["meses"]] + [round(c.get("programado") or 0.0, 2),
+                                                                   c.get("control") or ""])
+        _hoja_tabla(wb, hoja_m, ctx_h + claves_m + ["Ingresos_S", "Egresos_S", "Resultado_S"], fm,
+                    money_desde=len(ctx_h) + len(claves_m) + 1)
+        _hoja_tabla(wb, hoja_d, ctx_h + ["Codigo_Actividad"] + claves_d +
+                    ["Costo_Unitario_S", "Total_S", *[f"{m}_S" for m in MESES], "Programado_S", "Control"], fd,
+                    money_desde=len(ctx_h) + 2 + len(claves_d))
+
+    # ---- Funcionamiento
+    for kind, hoja, extra in (("fi", "Funcionamiento_Ing", ("tarifa_soles", "bruto", "descuentos", "neto")),
+                              ("fe", "Funcionamiento_Egr", ("costo_unit_soles", "coste_total", "total"))):
+        claves = []
+        for _uid, d in datos:
+            for r in d[kind]:
+                for k in r:
+                    if not k.startswith("_") and k not in _OMITIR and k not in claves:
+                        claves.append(k)
+        filas = []
+        for _uid, d in datos:
+            for r in d[kind]:
+                c = r["_c"]
+                filas.append(ctx(d["unidad"]) + [r.get(k) for k in claves] +
+                             [round(c.get(e) or 0.0, 2) for e in extra] + [round(v, 2) for v in c["meses"]])
+        _hoja_tabla(wb, hoja, ctx_h + claves + [f"{e}_S" for e in extra] + [f"{m}_S" for m in MESES], filas,
+                    money_desde=len(ctx_h) + len(claves) + 1)
+
+    # ---- BD consolidada NIIF (una fila por concepto y mes) + pivote
+    rows = ctrl.consolidated_rows(uids)
+    estado = {d["unidad"]["codigo_area"]: d["unidad"].get("estado_ficha") or "Borrador" for _u, d in datos}
+    ws_bd = wb.create_sheet("BD_CONSOLIDADA_NIIF")
+    write_bd_sheet(ws_bd, rows)
+    for i, r in enumerate(rows, start=2):  # columna adicional: estado de la ficha de la unidad
+        ws_bd.cell(i, len(POAController.BD_COLUMNS) + 1, estado.get(r["Codigo_Area"], ""))
+    h = ws_bd.cell(1, len(POAController.BD_COLUMNS) + 1, "Estado_Ficha")
+    h.font, h.fill, h.alignment = F_HDR, FILL_HDR, CENTER
+
+    # ---- Instrucciones al inicio
+    wi = wb.create_sheet("Instrucciones", 0)
+    x = XL(wi)
+    prm = ctrl.db.parametros()
+    x.title("LIBRO CONSOLIDADO POA - TODAS LAS UNIDADES",
+            f"{prm.get('institucion') or ''} · Año {anio} · {len(uids)} unidades · generado el "
+            f"{datetime.now():%Y-%m-%d %H:%M}", unidad=False)
+    x.widths({"A": 2, "B": 30, "C": 110})
+    hojas = [("Resumen_Unidades", "Una fila por unidad: estado de la ficha, revisión DPDI, totales y directrices."),
+             ("Iniciativas … Inversiones", "Registros maestros de todas las unidades (Codigo_Area en cada fila)."),
+             ("Detalle_*", "Partidas de cada actividad con montos mensuales en soles."),
+             ("Funcionamiento_Ing / _Egr", "Ingresos y egresos de funcionamiento con montos mensuales en soles."),
+             ("BD_CONSOLIDADA_NIIF", "Tabla plana para carga masiva: una fila por concepto y mes, con cuenta NIIF, "
+                                     "partida, categoría y Estado_Ficha. También disponible en CSV (separador «;»).")]
+    for i, (a, b) in enumerate(hojas, start=4):
+        x.put(f"B{i}", a, "label")
+        x.put(f"C{i}", b, "plain")
+    for ws in wb.worksheets:
+        ws.sheet_view.zoomScale = 90
+    wb.active = 0
+    wb.save(path)
+    return path
+
+
+def export_bd_csv(ctrl: POAController, uids: Iterable[int], path: str | Path) -> Path:
+    """BD_CONSOLIDADA_NIIF en CSV (UTF-8 con BOM, separador «;») para sistemas que solo aceptan texto plano."""
+    import pandas as pd
+    path = Path(path)
+    uids = list(uids)
+    estado = {u["codigo_area"]: u.get("estado_ficha") or "Borrador" for u in (ctrl.unidad(x) for x in uids)}
+    df = pd.DataFrame(ctrl.consolidated_rows(uids), columns=POAController.BD_COLUMNS)
+    df["Estado_Ficha"] = df["Codigo_Area"].map(estado)
+    df.to_csv(path, sep=";", index=False, encoding="utf-8-sig")
+    return path
+
+
 def export_libro_oficial(ctrl: POAController, uid: int, path: str | Path) -> Path:
     return OfficialWorkbookExporter(ctrl, uid).export(path)
 

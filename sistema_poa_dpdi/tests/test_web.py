@@ -327,6 +327,53 @@ class WebTest(unittest.TestCase):
         self.assertEqual(fila["actividad_comercial"], "")
         self.assertFalse(any(x["key"] == "s6m" for x in self.api(self.admin, "GET", "/api/resumen")["secciones"]))
 
+    def test_libro_consolidado_todas_las_unidades(self):
+        import openpyxl
+        unidades = self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]
+        ol = next(u for u in unidades if u["codigo_area"] == "OL")["id"]
+        ecc = next(u for u in unidades if u["codigo_area"] == "ECC-PRE")["id"]
+        for uid, nombre in ((ol, "Feria laboral"), (ecc, "Licencia de edición")):
+            m = self.api(self.admin, "POST", f"/api/md/OO?u={uid}", {"categoria": "Licencias de software", "nombre": nombre})
+            self.api(self.admin, "POST", f"/api/md/OO/{m['id']}/detalle",
+                     {"tipo": "Egresos", "partida": "Material de oficina", "cantidad": "1", "costo_unit_moneda": "600",
+                      "sustento": "Cotización", "meses": ["300", "300"] + [""] * 10})
+        # solo el administrador
+        self.api(self.admin, "POST", "/api/admin/t/usuarios",
+                 {"usuario": "consulta", "rol": "CONSULTA", "activo": 1, "debe_cambiar_clave": 0, "nueva_clave": "Consulta2027"})
+        self.assertEqual(self.cliente("consulta", "Consulta2027").get("/descargas/consolidado").status_code, 403)
+        # todas las unidades: maestros, detalles y BD con el código de área de cada fila
+        wb = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/consolidado?estado=todas").data))
+        for hoja in ("Instrucciones", "Resumen_Unidades", "Iniciativas", "Detalle_Iniciativas", "Otras_Operativas",
+                     "Detalle_Otras_Operativas", "Actividades_Propias", "Inversiones", "Funcionamiento_Ing",
+                     "Funcionamiento_Egr", "BD_CONSOLIDADA_NIIF"):
+            self.assertIn(hoja, wb.sheetnames)
+        oo = wb["Otras_Operativas"]
+        cab = [c.value for c in oo[1]]
+        nombres = {(r[cab.index("Codigo_Area")], r[cab.index("nombre")]) for r in oo.iter_rows(min_row=2, values_only=True)}
+        self.assertTrue({("OL", "Feria laboral"), ("ECC-PRE", "Licencia de edición")} <= nombres)
+        bd = wb["BD_CONSOLIDADA_NIIF"]
+        cab = [c.value for c in bd[1]]
+        areas = {r[cab.index("Codigo_Area")] for r in bd.iter_rows(min_row=2, values_only=True)}
+        self.assertTrue({"OL", "ECC-PRE"} <= areas)
+        self.assertEqual(cab[-1], "Estado_Ficha")
+        self.assertEqual(len(wb["Resumen_Unidades"]["A"]) - 1, len(unidades))
+        # solo aprobadas
+        self.api(self.admin, "GET", "/descargas/consolidado?estado=aprobadas", codigo=400)
+        self.api(self.admin, "POST", "/api/estado?u=" + str(ol), {"accion": "enviar"})
+        self.api(self.admin, "POST", "/api/estado?u=" + str(ol), {"accion": "aprobar"})
+        wb = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/consolidado?estado=aprobadas").data))
+        bd = wb["BD_CONSOLIDADA_NIIF"]
+        cab = [c.value for c in bd[1]]
+        self.assertEqual({r[cab.index("Codigo_Area")] for r in bd.iter_rows(min_row=2, values_only=True)}, {"OL"})
+        # CSV para carga masiva
+        csv = self.admin.get("/descargas/consolidado?estado=todas&formato=csv").data.decode("utf-8-sig")
+        self.assertTrue(csv.startswith("Anio;Codigo_Area;"))
+        self.assertIn(";ECC-PRE;", csv)
+        # el tablero informa la observación vigente para la ventana de revisión
+        self.api(self.admin, "POST", "/api/estado?u=" + str(ol), {"accion": "observar", "observacion": "Falta sustento"})
+        fila = next(x for x in self.api(self.admin, "GET", "/api/admin/tablero")["rows"] if x["id"] == ol)
+        self.assertEqual((fila["estado"], fila["estado_obs"]), ("Observada", "Falta sustento"))
+
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
         self.assertIn("--primario: #123456", self.admin.get("/").get_data(as_text=True))

@@ -689,22 +689,54 @@
     await cargar();
   };
 
-  POA.paginaTablero = async function () {
+  POA.paginaTablero = async function (esAdmin) {
     const r = await POA.api("GET", "/api/admin/tablero");
     const cuenta = (e) => r.rows.filter((x) => x.estado === e).length;
     const excede = r.rows.filter((x) => x.uso > 1).length;
-    $("#t-kpis").innerHTML = [["Unidades", r.rows.length], ["Con datos", r.rows.filter((x) => x.con_datos).length], ["Enviadas", cuenta("Enviada")],
-      ["Aprobadas", cuenta("Aprobada")], ["Observadas", cuenta("Observada")], ["Exceden techo", excede]]
-      .map(([l, v]) => `<div class="kpi"><span>${l}</span><strong>${v}</strong></div>`).join("");
+    $("#t-kpis").innerHTML = [["Unidades", r.rows.length, ""], ["Con datos", r.rows.filter((x) => x.con_datos).length, ""],
+      ["Enviadas (por revisar)", cuenta("Enviada"), "Enviada"], ["Aprobadas", cuenta("Aprobada"), "Aprobada"],
+      ["Observadas", cuenta("Observada"), "Observada"], ["Exceden techo", excede, ""]]
+      .map(([l, v, f]) => `<div class="kpi ${f ? "kpi-filtro" : ""}" ${f ? `data-filtro="${f}" title="Filtrar"` : ""}><span>${l}</span><strong>${v}</strong></div>`).join("");
+    $("#t-kpis").onclick = (e) => {
+      const k = e.target.closest("[data-filtro]"); if (!k) return;
+      const b = $("#t-buscar"); b.value = b.value === k.dataset.filtro ? "" : k.dataset.filtro; b.dispatchEvent(new Event("input"));
+    };
+    const alcance = $("#t-alcance");
+    if (alcance) alcance.onchange = () => {
+      $("#t-libro").href = `/descargas/consolidado?estado=${alcance.value}`;
+      $("#t-csv").href = `/descargas/consolidado?estado=${alcance.value}&formato=csv`;
+    };
+    const irA = async (x, destino) => { await POA.api("POST", "/api/contexto", { uid: x.id }); location.href = destino; };
+    const revisar = (x) => {
+      const est = x.estado || "Borrador";
+      let acc = "";
+      if (esAdmin && est === "Enviada") acc += '<button class="btn btn-primario" data-rev="aprobar">✔ Aprobar</button>';
+      if (esAdmin && ["Enviada", "Aprobada"].includes(est)) acc += '<button class="btn" data-rev="observar">✎ Observar</button>';
+      if (esAdmin && est !== "Borrador") acc += '<button class="btn" data-rev="reabrir">↺ Reabrir (borrador)</button>';
+      const caja = POA.modal("Revisión de la ficha", `<p><strong>${esc(x.unidad)}</strong></p>
+        <p>Estado: ${POA.fmt(est, "status")} ${x.estado_fecha ? `· ${esc(x.estado_fecha)} por ${esc(x.estado_usuario)}` : ""}</p>
+        ${x.estado_obs ? `<p class="nota"><strong>Observación vigente:</strong> ${esc(x.estado_obs)}</p>` : ""}
+        <p class="nota">Directrices a revisar: ${x.revisar || 0} · Egresos OPEX S/ ${POA.fmt(x.egresos, "money")} de S/ ${POA.fmt(x.techo, "money")}</p>
+        ${acc ? `<label class="bloque">Observación para la unidad (obligatoria al observar)<textarea id="rev-obs" rows="3"></textarea></label>` : ""}
+        <div class="botones"><button class="btn" data-ir="/resumen">Ver ficha resumen</button><button class="btn" data-ir="/">Ir al inicio de la unidad</button>${acc}</div>
+        ${esAdmin && est === "Borrador" ? '<p class="nota">La unidad aún no envía su ficha: podrá aprobarla u observarla cuando esté «Enviada».</p>' : ""}`);
+      caja.onclick = async (e) => {
+        const ir = e.target.closest("[data-ir]"); if (ir) return irA(x, ir.dataset.ir);
+        const b = e.target.closest("[data-rev]"); if (!b) return;
+        const accion = b.dataset.rev, obs = ($("#rev-obs") || {}).value || "";
+        if (accion === "observar" && !obs.trim()) { POA.toast("Escriba la observación para la unidad.", "error"); return; }
+        if (accion !== "observar" && !POA.confirmar(`¿Confirma ${accion} la ficha de ${x.unidad}?`)) return;
+        try { await POA.api("POST", `/api/estado?u=${x.id}`, { accion, observacion: obs }); POA.toast("Estado actualizado."); setTimeout(() => location.reload(), 500); } catch (err) { /* */ }
+      };
+    };
     const grid = new Grid($("#t-tabla"), [{ key: "unidad", label: "Unidad (código / centro de costo / unidad)" }, { key: "macrogrupo", label: "Macrogrupo" },
       { key: "responsables", label: "Responsables" }, { key: "estado", label: "Estado", fmt: "status" }, { key: "estado_fecha", label: "Fecha estado" },
       { key: "ingresos", label: "Ingresos OPEX", fmt: "money" }, { key: "egresos", label: "Egresos OPEX*", fmt: "money" }, { key: "techo", label: "Techo OPEX", fmt: "money" },
       { key: "uso", label: "% uso", fmt: "pct" }, { key: "capex", label: "CAPEX", fmt: "money" }, { key: "revisar", label: "Directrices a revisar", fmt: "int" }], {
-      buscador: $("#t-buscar"), rowClass: (x) => (x.uso > 1 || x.revisar ? "alerta-fila" : ""),
-      onSelect: async (x) => { if (POA.confirmar(`¿Ir a la ficha de ${x.unidad}?`)) { await POA.api("POST", "/api/contexto", { uid: x.id }); location.href = "/resumen"; } },
+      buscador: $("#t-buscar"), rowClass: (x) => (x.uso > 1 || x.revisar ? "alerta-fila" : ""), onSelect: revisar,
     });
     grid.setRows(r.rows);
-    $("#t-tabla").insertAdjacentHTML("afterend", '<p class="nota">* Egresos OPEX sin actividades propias (estas deben autofinanciarse). Haga clic en una fila para abrir su ficha.</p>');
+    $("#t-tabla").insertAdjacentHTML("afterend", `<p class="nota">* Egresos OPEX sin actividades propias (estas deben autofinanciarse). Haga clic en una unidad para ${esAdmin ? "revisarla (aprobar, observar o reabrir) o abrir su ficha" : "abrir su ficha"}.</p>`);
   };
 
   // cargas de archivos genéricas (data-carga)
