@@ -242,7 +242,7 @@ class WebTest(unittest.TestCase):
             rep = self.api(self.admin, "POST", url, data={"archivo": (io.BytesIO(plantilla), "plantilla.xlsx")},
                            content_type="multipart/form-data")
             self.assertEqual(rep["Archivo reconocido"], "Plantilla de Parámetros y Catálogos")
-            self.assertGreater(rep["Unidades y techos"], 0)
+            self.assertIn("filas leídas", rep["Unidades y techos"])
             rep = self.api(self.admin, "POST", url, data={"archivo": (io.BytesIO(libro), "ficha.xlsx")},
                            content_type="multipart/form-data")
             self.assertEqual(rep["Archivo reconocido"], "Parámetros de una Ficha Excel")
@@ -373,6 +373,48 @@ class WebTest(unittest.TestCase):
         self.api(self.admin, "POST", "/api/estado?u=" + str(ol), {"accion": "observar", "observacion": "Falta sustento"})
         fila = next(x for x in self.api(self.admin, "GET", "/api/admin/tablero")["rows"] if x["id"] == ol)
         self.assertEqual((fila["estado"], fila["estado_obs"]), ("Observada", "Falta sustento"))
+
+    def test_mismo_codigo_en_dos_sedes(self):
+        import openpyxl
+        sur = self.api(self.admin, "POST", "/api/admin/t/unidades",
+                       {"codigo_area": "10110101", "nombre_unidad": "Lima Sur", "centro_costo": "EP INGENIERÍA DE SISTEMAS",
+                        "macrogrupo": "PREGRADO", "techo_funcionamiento": "1000"})["id"]
+        norte = self.api(self.admin, "POST", "/api/admin/t/unidades",
+                         {"codigo_area": "10110101", "nombre_unidad": "Lima Norte", "centro_costo": "EP INGENIERÍA DE SISTEMAS",
+                          "macrogrupo": "PREGRADO", "techo_funcionamiento": "2000"})["id"]
+        self.assertNotEqual(sur, norte)
+        filas = {u["id"]: u for u in self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]}
+        self.assertEqual((filas[sur]["techo_funcionamiento"], filas[norte]["techo_funcionamiento"]), (1000, 2000))
+        # plantilla de parámetros: cada sede conserva sus techos
+        plantilla = self.admin.get("/descargas/plantilla-parametros").data
+        wb = openpyxl.load_workbook(io.BytesIO(plantilla))
+        ws = wb["Unidades_Techos"]
+        cab = {ws.cell(4, j).value: j for j in range(1, ws.max_column + 1)}
+        for r in range(5, ws.max_row + 1):
+            if ws.cell(r, cab["Código de área"]).value == "10110101":
+                nuevo = 3000 if ws.cell(r, cab["Nombre de la unidad orgánica"]).value == "Lima Sur" else 4000
+                ws.cell(r, cab["Techo funcionamiento (S/)"], nuevo)
+        buf = io.BytesIO()
+        wb.save(buf)
+        rep = self.api(self.admin, "POST", "/cargas/plantilla-parametros",
+                       data={"archivo": (io.BytesIO(buf.getvalue()), "p.xlsx")}, content_type="multipart/form-data")
+        self.assertIn("2 actualizadas", rep["Unidades y techos"])
+        filas = {u["id"]: u for u in self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]}
+        self.assertEqual((filas[sur]["techo_funcionamiento"], filas[norte]["techo_funcionamiento"]), (3000, 4000))
+        # carga masiva de usuarios: la clave «código - sede» resuelve la unidad; el código solo es ambiguo
+        wb = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/plantilla-usuarios").data))
+        claves = [r[0] for r in wb["Unidades"].iter_rows(min_row=2, values_only=True)]
+        self.assertIn("10110101 - Lima Norte", claves)
+        wb["Usuarios"].append(["juan.norte", "Juan", "", "RESPONSABLE", "10110101 - Lima Norte", "", "Sí"])
+        wb["Usuarios"].append(["juan.duda", "Juan", "", "RESPONSABLE", "10110101", "", "Sí"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        rep = self.api(self.admin, "POST", "/cargas/usuarios", data={"archivo": (io.BytesIO(buf.getvalue()), "u.xlsx")},
+                       content_type="multipart/form-data")
+        usuarios = {u["usuario"]: u for u in self.api(self.admin, "GET", "/api/admin/t/usuarios")["rows"]}
+        self.assertEqual(usuarios["juan.norte"]["unidades"], [norte])
+        self.assertEqual(usuarios["juan.norte"]["_unidades"], "10110101 - Lima Norte")
+        self.assertTrue(any("indique la sede" in a for a in rep["avisos"]))
 
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})

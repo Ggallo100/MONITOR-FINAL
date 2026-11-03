@@ -13,6 +13,7 @@ oficiales definidos en catalogs_seed.py.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -95,7 +96,7 @@ CREATE TABLE IF NOT EXISTS parametros_globales (
 
 CREATE TABLE IF NOT EXISTS unidades_organicas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo_area TEXT NOT NULL UNIQUE,
+    codigo_area TEXT NOT NULL,                  -- un mismo código puede existir en varias sedes
     macrogrupo TEXT NOT NULL DEFAULT 'Soporte Académico/Administrativo',
     nombre_unidad TEXT NOT NULL,
     centro_costo TEXT DEFAULT '',
@@ -120,7 +121,8 @@ CREATE TABLE IF NOT EXISTS unidades_organicas (
     elaborado_fecha TEXT DEFAULT '',
     revisado_nombre TEXT DEFAULT '',
     revisado_cargo TEXT DEFAULT '',
-    revisado_fecha TEXT DEFAULT ''
+    revisado_fecha TEXT DEFAULT '',
+    UNIQUE (codigo_area, nombre_unidad)         -- la unidad es código de área + unidad orgánica (sede)
 );
 
 CREATE TABLE IF NOT EXISTS catalogo_niif_partidas (
@@ -375,7 +377,38 @@ class Database:
             if column not in cols:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
         self.conn.commit()
+        self._migrar_unidad_por_sede()
         self._columns_cache.clear()
+
+    def _migrar_unidad_por_sede(self) -> None:
+        """Bases anteriores: «codigo_area» era único. Ahora la unidad es código de área + unidad orgánica (sede),
+        porque un mismo código existe en Lima Norte y Lima Sur. Se reconstruye la tabla conservando los IDs y datos
+        (procedimiento recomendado por SQLite, con las claves foráneas desactivadas durante el cambio)."""
+        sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='unidades_organicas'"
+                                ).fetchone()
+        if not sql or not re.search(r"codigo_area\s+TEXT\s+NOT\s+NULL\s+UNIQUE", sql[0], re.I):
+            return
+        nuevo = re.sub(r"codigo_area\s+TEXT\s+NOT\s+NULL\s+UNIQUE", "codigo_area TEXT NOT NULL", sql[0], flags=re.I)
+        nuevo = nuevo.rstrip().rstrip(")").rstrip() + ",\n    UNIQUE (codigo_area, nombre_unidad)\n)"
+        nuevo = re.sub(r"CREATE TABLE\s+(IF NOT EXISTS\s+)?\"?unidades_organicas\"?", "CREATE TABLE unidades_organicas_v2",
+                       nuevo, count=1, flags=re.I)
+        cols = ", ".join(r[1] for r in self.conn.execute("PRAGMA table_info(unidades_organicas)").fetchall())
+        self.conn.commit()
+        self.conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            self.conn.execute("BEGIN")
+            self.conn.execute(nuevo)
+            self.conn.execute(f"INSERT INTO unidades_organicas_v2 ({cols}) SELECT {cols} FROM unidades_organicas")
+            self.conn.execute("DROP TABLE unidades_organicas")
+            self.conn.execute("ALTER TABLE unidades_organicas_v2 RENAME TO unidades_organicas")
+            if self.conn.execute("PRAGMA foreign_key_check").fetchall():
+                raise sqlite3.DatabaseError("Referencias inválidas tras migrar unidades_organicas.")
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+        finally:
+            self.conn.execute("PRAGMA foreign_keys = ON")
 
     def meta(self, clave: str) -> Optional[str]:
         r = self.conn.execute("SELECT valor FROM app_meta WHERE clave = ?", (clave,)).fetchone()

@@ -113,6 +113,15 @@ ADMIN) descarga el **libro consolidado + BD NIIF** de todas las unidades o solo 
 (`/descargas/consolidado?estado=todas|aprobadas`, `&formato=csv` para la BD en CSV `;` UTF-8): resumen por unidad,
 maestros, detalles, funcionamiento y `BD_CONSOLIDADA_NIIF` con `Estado_Ficha`, listos para la carga masiva.
 
+### Unidades con el mismo código en varias sedes
+
+La unidad se identifica por **código de área + unidad orgánica (sede)** (`UNIQUE (codigo_area, nombre_unidad)`): el
+mismo código puede existir en Lima Norte y Lima Sur con techos distintos. Las bases anteriores se migran solas al
+iniciar (se conservan IDs y datos). Donde se escribe la unidad (ámbito de la plantilla de funcionamiento, carga
+masiva de usuarios) se usa la clave: el código, o «código - sede» si se repite. La importación de la plantilla
+informa unidades nuevas, actualizadas y sin cambios, el detalle de techos modificados, filas repetidas y unidades del
+sistema que no están en el archivo (opción de eliminarlas si no tienen actividades).
+
 ### Manuales y soporte
 
 Los manuales en PDF están en `manuales/pdf/` y se publican en la página **Ayuda** del sistema según el rol:

@@ -748,12 +748,14 @@
     try {
       const rep = await POA.api("POST", f.dataset.carga, new FormData(f));
       const avisos = rep.avisos || [];
-      const txt = Object.entries(rep).filter(([k]) => !["avisos", "credenciales"].includes(k)).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+      const listas = Object.entries(rep).filter(([k, v]) => Array.isArray(v) && !["avisos", "credenciales"].includes(k));
+      const txt = Object.entries(rep).filter(([k, v]) => !["avisos", "credenciales"].includes(k) && !Array.isArray(v)).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
       const cred = rep.credenciales || [];
       const tablaCred = cred.length ? `<h4>Claves temporales (${cred.length})</h4><p class="nota">Descárguelas ahora: no se volverán a mostrar.</p>
         <div class="tabla-scroll alto-bajo"><table class="tabla"><tr><th>Usuario</th><th>Nombre</th><th>Clave temporal</th></tr>${cred.map((c) => `<tr><td>${esc(c.usuario)}</td><td>${esc(c.nombre)}</td><td><code>${esc(c.clave)}</code></td></tr>`).join("")}</table></div>
         <button class="btn" id="btn-cred">⬇ Descargar claves (.csv)</button> ` : "";
-      POA.modal("Carga completada", `<pre>${esc(txt)}</pre>${tablaCred}${avisos.length ? "<h4>Avisos</h4><ul>" + avisos.slice(0, 50).map((a) => `<li>${esc(a)}</li>`).join("") + "</ul>" : ""}<button class="btn btn-primario" onclick="location.reload()">Aceptar</button>`);
+      const htmlListas = listas.map(([k, v]) => `<h4>${esc(k)} (${v.length})</h4><ul class="tabla-scroll alto-bajo">${v.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`).join("");
+      POA.modal("Carga completada", `<pre>${esc(txt)}</pre>${htmlListas}${tablaCred}${avisos.length ? "<h4>Avisos</h4><ul>" + avisos.slice(0, 50).map((a) => `<li>${esc(a)}</li>`).join("") + "</ul>" : ""}<button class="btn btn-primario" onclick="location.reload()">Aceptar</button>`);
       if (cred.length) $("#btn-cred").onclick = () => {
         const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
         const csv = "\ufeffUsuario;Nombre;Correo;Clave temporal\r\n" + cred.map((c) => [c.usuario, c.nombre, c.correo, c.clave].map(q).join(";")).join("\r\n");

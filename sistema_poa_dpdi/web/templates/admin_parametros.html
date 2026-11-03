@@ -13,7 +13,9 @@
     <div class="paso-carga">
       <strong>2. Importar</strong>
       <p class="nota">Seleccione la plantilla llenada <em>o</em> una Ficha_Formulacion_POA (se toma su hoja «Parámetros»). El sistema reconoce el tipo de archivo.</p>
-      <form class="fila-form" data-carga="/cargas/plantilla-parametros"><input type="file" name="archivo" accept=".xlsx,.xlsm" required><button class="btn btn-primario">⬆ Importar</button></form>
+      <form class="fila-form" data-carga="/cargas/plantilla-parametros"><input type="file" name="archivo" accept=".xlsx,.xlsm" required>
+        <label class="check"><input type="checkbox" name="eliminar_ausentes" value="1"> Eliminar las unidades que no estén en el archivo (solo las que no tienen actividades)</label>
+        <button class="btn btn-primario">⬆ Importar</button></form>
     </div>
     <div class="paso-carga">
       <strong>Reportes y respaldo</strong>

@@ -116,13 +116,19 @@
     <code>Datos_Generales</code>, <code>Unidades_Techos</code>, <code>Cuentas_NIIF_Partidas_GG</code>, <code>Catalogos_Estrategicos</code>,
     <code>Costos_Referencia</code> y <code>Plantilla_Funcionamiento</code>.</li>
   <li>Modifique el libro en Excel respetando los encabezados. Para filas nuevas deje vacía la columna <b>ID</b>; para modificar una fila
-    existente conserve su ID. Las unidades se identifican por su <b>código de área</b>: si el código ya existe, se actualizan sus datos y techos.</li>
+    existente conserve su ID. Cada unidad se identifica por <b>código de área + unidad orgánica (sede)</b>: un mismo código puede existir
+    en Lima Norte y Lima Sur y son unidades distintas, cada una con sus techos. Si la combinación ya existe, se actualizan sus datos y techos;
+    si no existe, se crea la unidad.</li>
   <li><b>2. Importar</b>: seleccione el archivo y pulse <b>Importar</b>. El sistema reconoce el tipo de archivo, muestra cuántas filas
     actualizó por hoja y los avisos (por ejemplo, objetivos sin eje u OE, o valores no válidos), sin detener la carga del resto.</li>
 </ol>
+<p>En <b>Unidades y techos</b> el resultado indica cuántas unidades son <b>nuevas</b>, cuántas se <b>actualizaron</b> y cuántas quedaron
+  <b>sin cambios</b>, y lista cada cambio (por ejemplo «4011020401: Techo funcionamiento 338,121.00 → 123,456.78»). Si una unidad del
+  sistema no está en el archivo, se avisa. Marque <b>«Eliminar las unidades que no estén en el archivo»</b> para que la lista quede igual
+  al archivo; las unidades con actividades registradas nunca se eliminan.</p>
 <p>En el mismo recuadro <b>2. Importar</b> también puede cargar una <b>Ficha_Formulacion_POA</b> llenada: el sistema toma su hoja
   «Parámetros» (datos generales y techos de la unidad). El recuadro <b>Reportes y respaldo</b> ofrece el <b>Respaldo completo de la base</b>
-  y la <b>BD NIIF consolidada de todas las unidades</b> (ver capítulos 12 y 13).</p>
+  y el <b>Libro consolidado + BD NIIF</b> de todas las unidades (ver capítulos 12 y 13).</p>
 <div class="tip"><b>Recomendación</b>Antes de una importación masiva descargue un <b>respaldo completo</b>. Si algo sale mal, Tecnología puede restaurarlo.</div>
 
 <h1 class="cap" id="c6"><span class="num">6</span>Unidades orgánicas y techos</h1>
@@ -130,9 +136,11 @@
 <figure><img src="../img/a03_unidades.png"><figcaption><b>Figura 3.</b> Mantenedor de unidades orgánicas y techos.</figcaption></figure>
 <table class="libre">
   <tr><th>Campo</th><th>Descripción</th></tr>
-  <tr><td>Código de área</td><td>Identificador único de la unidad (por ejemplo 101109). Es el prefijo de los códigos en la base consolidada.</td></tr>
+  <tr><td>Código de área</td><td>Código de la unidad (por ejemplo 101109). Junto con la unidad orgánica (sede) identifica a la unidad: el mismo código
+    puede repetirse en otra sede. Es el prefijo de los códigos en la base consolidada (con la sede cuando el código se repite).</td></tr>
   <tr><td>Centro de costo</td><td>Nombre del centro de costo (por ejemplo CENTRO DE INNOVACIÓN).</td></tr>
-  <tr><td>Nombre de la unidad orgánica</td><td>Unidad orgánica o sede (por ejemplo Lima Sur). La unidad se muestra como <b>código - centro de costo - unidad orgánica</b>.</td></tr>
+  <tr><td>Nombre de la unidad orgánica</td><td>Unidad orgánica o sede (por ejemplo Lima Sur). La unidad se muestra como <b>código - centro de costo - unidad orgánica</b>.
+    Donde se escribe la unidad (ámbito de la plantilla de funcionamiento, carga masiva de usuarios) se usa el código, o «código - sede» si el código se repite.</td></tr>
   <tr><td>Macrogrupo</td><td>Agrupación usada en reportes y en la plantilla de funcionamiento.</td></tr>
   <tr><td>Responsable, cargo, correo</td><td>Datos que aparecen en la Ficha resumen.</td></tr>
   <tr><td>¿Genera ingresos?</td><td>Habilita las filas de ingresos de la plantilla de funcionamiento marcadas como «solo unidades que generan ingresos».</td></tr>

@@ -276,6 +276,14 @@ def to_soles(amount: Optional[float], moneda: str, tc: float) -> Optional[float]
     return amount * tc if (moneda or "").strip() == "US$" else amount
 
 
+def _mismo_valor(a: Any, b: Any) -> bool:
+    """Compara un valor guardado con el importado (números con tolerancia, textos sin espacios extremos)."""
+    fa, fb = to_float(a), to_float(b)
+    if isinstance(b, (int, float)) and fa is not None and fb is not None:
+        return abs(fa - fb) < 0.005
+    return s(a) == s(b)
+
+
 def control_distribucion(total: float, programado: float) -> str:
     """=IF(AND(L=0,Y=0),"",IF(ABS(Y-L)<0.01,"OK","Revisar"))"""
     if abs(total) < 1e-12 and abs(programado) < 1e-12:
@@ -440,6 +448,53 @@ class POAController:
         partes = [codigo, cc, nombre] if norm_key(cc) != norm_key(nombre) else [codigo, cc]
         return " - ".join(p for p in partes if p)
 
+    # ------------------------------------------- identidad de la unidad
+    # Un mismo código de área puede existir en varias sedes (p. ej. Lima Norte y Lima Sur): la unidad es
+    # código de área + unidad orgánica (sede). Donde se escribe un código (ámbito de la plantilla, usuarios),
+    # se usa la «clave»: el código solo si es único, o «código - sede» si se repite.
+    def clave_unidad(self, u: dict, unidades: Optional[list] = None) -> str:
+        us = unidades if unidades is not None else self.unidades()
+        repetido = sum(1 for x in us if x["codigo_area"] == u["codigo_area"]) > 1
+        return f"{u['codigo_area']} - {u['nombre_unidad']}" if repetido else u["codigo_area"]
+
+    def buscar_unidad(self, texto: Any, unidades: Optional[list] = None) -> tuple[Optional[int], str]:
+        """Resuelve «código», «código - sede» o «código - centro de costo - sede». Devuelve (id, mensaje de error)."""
+        t = s(texto)
+        if not t:
+            return None, "vacío"
+        us = unidades if unidades is not None else self.unidades()
+        partes = [p.strip() for p in re.split(r"\s+-\s+|\s*\|\s*", t) if p.strip()]
+        codigo = partes[0].upper()
+        mismas = [u for u in us if u["codigo_area"].upper() == codigo]
+        if len(partes) > 1:
+            sede = norm_key(partes[-1])
+            exactas = [u for u in mismas if norm_key(u["nombre_unidad"]) == sede]
+            if len(exactas) == 1:
+                return exactas[0]["id"], ""
+        if len(mismas) == 1:
+            return mismas[0]["id"], ""
+        if not mismas:
+            return None, f"la unidad «{t}» no existe"
+        return None, (f"el código {codigo} existe en varias sedes; indique la sede: "
+                      + " o ".join(f"«{codigo} - {u['nombre_unidad']}»" for u in mismas))
+
+    def _clave_registro(self, codigo: Any, sede: Any) -> tuple[str, str]:
+        return s(codigo).upper(), norm_key(sede)
+
+    def unidad_por_codigo_y_sede(self, codigo: Any, sede: Any) -> Optional[dict]:
+        clave = self._clave_registro(codigo, sede)
+        for u in self.unidades():
+            if self._clave_registro(u["codigo_area"], u["nombre_unidad"]) == clave:
+                return u
+        return None
+
+    def prefijo_bd(self, u: dict, unidades: Optional[list] = None) -> str:
+        """Prefijo de los códigos en la BD consolidada: el área, más la sede si el código se repite."""
+        us = unidades if unidades is not None else self.unidades()
+        if sum(1 for x in us if x["codigo_area"] == u["codigo_area"]) > 1:
+            return f"{u['codigo_area']}-{re.sub(r'[^A-Z0-9]', '', norm_key(u['nombre_unidad']).upper())}"
+        return u["codigo_area"]
+
     def macrogrupos(self) -> list[str]:
         """Macrogrupos oficiales + los registrados por la DPDI en las unidades."""
         otros = [r["macrogrupo"] for r in self.db.query(
@@ -458,13 +513,14 @@ class POAController:
                 data[k] = to_float(data[k], 0.0) or 0.0
         if "genera_ingresos" in data:
             data["genera_ingresos"] = 1 if str(data["genera_ingresos"]).strip() in ("1", "True", "Sí", "true") else 0
-        otra = self.db.query_one("SELECT id, nombre_unidad FROM unidades_organicas WHERE codigo_area=?",
-                                 (data["codigo_area"],))
+        data["nombre_unidad"] = s(data["nombre_unidad"])
+        otra = self.unidad_por_codigo_y_sede(data["codigo_area"], data["nombre_unidad"])
         if otra and uid and otra["id"] != uid:
-            raise ValueError(f"El código de área {data['codigo_area']} ya pertenece a «{otra['nombre_unidad']}». "
-                             "Use otro código o seleccione esa unidad en la tabla para modificarla.")
+            raise ValueError(f"Ya existe la unidad {data['codigo_area']} - {otra['centro_costo']} - "
+                             f"{otra['nombre_unidad']} (mismo código de área y unidad orgánica). Selecciónela en la "
+                             "tabla para modificarla.")
         if otra and not uid:
-            uid = otra["id"]  # el código de área identifica a la unidad: se actualiza en lugar de duplicarla
+            uid = otra["id"]  # código + sede identifican a la unidad: se actualiza en lugar de duplicarla
         return self.db.upsert("unidades_organicas", data, uid)
 
     def delete_unidad(self, uid: int) -> None:
@@ -651,7 +707,7 @@ class POAController:
 
     def codigo_bd(self, uid: int, codigo: str) -> str:
         """Código prefijado con el área para la base consolidada (p. ej. OL-INI-01)."""
-        return f"{self.unidad(uid)['codigo_area']}-{codigo}"
+        return f"{self.prefijo_bd(self.unidad(uid))}-{codigo}"
 
     def generar_codigos(self, uid: int, cantidades: dict[str, int]) -> list[tuple[str, str, str]]:
         """Crea registros correlativos vacíos (placeholders) por tipo de actividad aprobada."""
@@ -1449,12 +1505,14 @@ class POAController:
 
     def consolidated_rows(self, uids: Iterable[int]) -> list[dict]:
         out = []
+        todas = self.unidades()
         for uid in uids:
             d = self.load_unit_data(uid)
             self.directrices(uid, d)
             flags = d["_flags"]
             u, anio = d["unidad"], d["params"].anio
             area = u["codigo_area"]
+            prefijo = self.prefijo_bd(u, todas)
 
             def estado(*keys):
                 codes = set()
@@ -1472,7 +1530,7 @@ class POAController:
                     out.append({
                         "Anio": anio, "Codigo_Area": area, "Macrogrupo": u["macrogrupo"],
                         "Unidad_Organica": u["nombre_unidad"], "Centro_Costo": u["centro_costo"],
-                        "Tipo_Actividad_POA": tipo_act, "Codigo_Actividad": f"{area}-{codigo}",
+                        "Tipo_Actividad_POA": tipo_act, "Codigo_Actividad": f"{prefijo}-{codigo}",
                         "Nombre_Actividad": nombre, "Tipo_Actividad_Comercial": act_com, "Eje_Estrategico": eje, "OE_PEI": oe, "AE_PEI": ae, "OBJ_POA": obj,
                         "Prioridad": prioridad, "Tipo_Flujo": tipo_flujo,
                         "Codigo_NIIF": cat["codigo_niif"] if cat else "",
@@ -1532,7 +1590,7 @@ class POAController:
 
         fr = wb["Ficha_Resumen"]
         nombre_unidad = s(fr["C6"].value)
-        uid = unidad_id or self._match_unidad(nombre_unidad, s(fr["C7"].value), path)
+        uid = unidad_id or self._match_unidad(nombre_unidad, s(fr["C7"].value), path, s(fr["K5"].value))
         unidad_data = {
             "nombre_unidad": nombre_unidad or None, "centro_costo": s(fr["C7"].value) or None,
             "responsable": s(fr["C8"].value) or None, "cargo": s(fr["C9"].value) or None,
@@ -1547,7 +1605,7 @@ class POAController:
         if uid is None:
             area, macro = self._area_desde_archivo(path)
             base_area, n = area, 1
-            while self.db.scalar("SELECT 1 FROM unidades_organicas WHERE codigo_area=?", (area,)):
+            while self.unidad_por_codigo_y_sede(area, nombre_unidad or path.stem):
                 n += 1
                 area = f"{base_area}{n}"
             new = {k: v for k, v in unidad_data.items() if v is not None}
@@ -1578,16 +1636,24 @@ class POAController:
         c["FE"] = self._imp_flat(wb, uid, "FE", "Funcionamiento_Egr")
         return report
 
-    def _match_unidad(self, nombre: str, cc: str, path: Path) -> Optional[int]:
-        for u in self.unidades():
-            if nombre and norm_key(u["nombre_unidad"]) == norm_key(nombre):
-                return u["id"]
-        for u in self.unidades():
-            if cc and norm_key(u["centro_costo"]) == norm_key(cc):
-                return u["id"]
+    def _match_unidad(self, nombre: str, cc: str, path: Path, codigo: str = "") -> Optional[int]:
+        """Unidad de una Ficha Excel: código + sede; centro de costo + sede; código o centro de costo si son únicos."""
+        us = self.unidades()
+        n, c_, cod = norm_key(nombre), norm_key(cc), s(codigo).upper()
+
+        def unica(cands):
+            return cands[0]["id"] if len(cands) == 1 else None
+
+        for cands in ([u for u in us if cod and u["codigo_area"].upper() == cod and norm_key(u["nombre_unidad"]) == n],
+                      [u for u in us if c_ and norm_key(u["centro_costo"]) == c_ and norm_key(u["nombre_unidad"]) == n],
+                      [u for u in us if cod and u["codigo_area"].upper() == cod],
+                      [u for u in us if c_ and norm_key(u["centro_costo"]) == c_],
+                      [u for u in us if n and norm_key(u["nombre_unidad"]) == n]):
+            uid = unica(cands)
+            if uid:
+                return uid
         area, _ = self._area_desde_archivo(path)
-        r = self.db.query_one("SELECT id FROM unidades_organicas WHERE codigo_area = ?", (area,))
-        return r["id"] if r else None
+        return unica([u for u in us if u["codigo_area"] == area])
 
     @staticmethod
     def _area_desde_archivo(path: Path) -> tuple[str, str]:
@@ -1858,7 +1924,13 @@ class POAController:
         return 1
 
     # ------------------------------------- plantilla de parámetros y catálogos
-    def import_plantilla_parametros(self, path: str | Path) -> dict:
+    def _unidades_con_datos(self) -> set[int]:
+        """Unidades con actividades registradas en cualquier año (no se eliminan en una sincronización)."""
+        return {r["unidad_id"] for t in ("iniciativas", "otras_operativas", "act_propias", "inversiones",
+                                         "funcionamiento_ing", "funcionamiento_egr")
+                for r in self.db.query(f"SELECT DISTINCT unidad_id FROM {t}")}
+
+    def import_plantilla_parametros(self, path: str | Path, eliminar_unidades_ausentes: bool = False) -> dict:
         """Lee la plantilla «Parámetros y Catálogos» (descargada desde el sistema) y actualiza la base."""
         import openpyxl
         wb = openpyxl.load_workbook(path, data_only=True)
@@ -1916,8 +1988,15 @@ class POAController:
             rep["Datos generales"] = len(gen)
 
             # --- Unidades y techos
-            n = 0
-            for row in tabla("Unidades_Techos"):
+            n = n_nuevas = n_act = n_igual = 0
+            detalle: list[str] = []
+            n_cambios = 0
+            codigos_archivo: set[tuple[str, str]] = set()  # (código de área, sede) leídos del archivo
+            etiquetas = dict(PLANTILLA_PARAM["Unidades_Techos"])
+            filas_u = tabla("Unidades_Techos")
+            claves_archivo = {self._clave_registro(r["codigo_area"], r["nombre_unidad"]) for r in filas_u}
+            vistas: dict[tuple[str, str], int] = {}
+            for row in filas_u:
                 area = s(row["codigo_area"]).upper()
                 if not area:
                     continue
@@ -1934,14 +2013,65 @@ class POAController:
                     rep["avisos"].append(f"Unidades_Techos fila {row['_fila']}: falta el nombre de la unidad.")
                     continue
                 # El código de área identifica a la unidad (los ID pueden venir de otra instalación).
-                old = self.db.query_one("SELECT id FROM unidades_organicas WHERE codigo_area=?", (area,))
-                uid = old["id"] if old else rid("unidades_organicas", row["id"])  # ID sin área: cambio de código
-                if uid:
-                    self.db.update("unidades_organicas", uid, data, commit=False)
+                clave = self._clave_registro(area, data["nombre_unidad"])
+                if clave in vistas:
+                    rep["avisos"].append(f"Unidades_Techos fila {row['_fila']}: repite la unidad {area} - "
+                                         f"{data['nombre_unidad']} de la fila {vistas[clave]} (se usan los datos de "
+                                         "la última fila).")
+                vistas[clave] = row["_fila"]
+                codigos_archivo.add(clave)
+                # La unidad es código de área + unidad orgánica (sede); los ID pueden venir de otra instalación.
+                old = self.unidad_por_codigo_y_sede(area, data["nombre_unidad"])
+                if not old and rid("unidades_organicas", row["id"]):
+                    # ID sin código+sede conocido: es un cambio de código o de sede solo si es la misma unidad (mismo
+                    # centro de costo) y su código+sede actual ya no figura en el archivo. Si no, se crea una nueva.
+                    por_id = self.db.get("unidades_organicas", rid("unidades_organicas", row["id"]))
+                    if por_id and norm_key(por_id["centro_costo"]) == norm_key(data["centro_costo"]) and \
+                            self._clave_registro(por_id["codigo_area"], por_id["nombre_unidad"]) not in claves_archivo:
+                        old = por_id
+                if old:
+                    cambios = [k for k in data if k != "codigo_area" and not _mismo_valor(old.get(k), data[k])]
+                    if old["codigo_area"] != area:
+                        cambios.insert(0, "codigo_area")
+                    nombre_u = f"{area} - {data['nombre_unidad']}"
+                    if cambios:
+                        self.db.update("unidades_organicas", old["id"], data, commit=False)
+                        n_act += 1
+                        for k in cambios:
+                            n_cambios += 1
+                            if k.startswith(("techo_", "meta_")) and len(detalle) < 40:
+                                detalle.append(f"{nombre_u}: {etiquetas[k]} {fmt_money(old.get(k) or 0)} → "
+                                               f"{fmt_money(data[k])}")
+                            elif k in ("codigo_area", "nombre_unidad", "centro_costo", "macrogrupo") and len(detalle) < 40:
+                                detalle.append(f"{nombre_u}: {etiquetas[k]} «{old.get(k) or ''}» → «{data[k]}»")
+                    else:
+                        n_igual += 1
                 else:
                     self.db.insert("unidades_organicas", data, commit=False)
+                    n_nuevas += 1
                 n += 1
-            rep["Unidades y techos"] = n
+            rep["Unidades y techos"] = (f"{n} filas leídas: {n_nuevas} nuevas, {n_act} actualizadas, "
+                                        f"{n_igual} sin cambios")
+            if detalle:
+                if n_cambios > len(detalle):
+                    detalle.append(f"… y {n_cambios - len(detalle)} cambio(s) más.")
+                rep["Cambios en unidades y techos"] = detalle
+            if codigos_archivo:
+                ausentes = [u for u in self.db.all("unidades_organicas", order="codigo_area")
+                            if self._clave_registro(u["codigo_area"], u["nombre_unidad"]) not in codigos_archivo]
+                if ausentes and eliminar_unidades_ausentes:
+                    con_datos = self._unidades_con_datos()
+                    borrar = [u for u in ausentes if u["id"] not in con_datos]
+                    for u in borrar:
+                        self.db.execute("DELETE FROM unidades_organicas WHERE id=?", (u["id"],))
+                    ausentes = [u for u in ausentes if u["id"] in con_datos]
+                    if borrar:
+                        rep["Unidades eliminadas (no estaban en el archivo)"] = len(borrar)
+                if ausentes:
+                    rep["avisos"].insert(0, f"{len(ausentes)} unidad(es) del sistema no están en el archivo y se "
+                                            f"conservaron{' por tener actividades registradas' if eliminar_unidades_ausentes else ''}: "
+                                            + ", ".join(f"{u['codigo_area']} - {u['nombre_unidad']}" for u in ausentes[:15])
+                                            + (" …" if len(ausentes) > 15 else ""))
 
             # --- Cuentas NIIF + Partidas GG (base consolidada)
             n = 0
@@ -2021,19 +2151,24 @@ class POAController:
 
             # --- Plantilla de funcionamiento
             n = 0
-            areas = {u["codigo_area"]: u["id"] for u in self.unidades()}
+            todas_u = self.unidades()
             for row in tabla("Plantilla_Funcionamiento"):
                 if not s(row["partida"]):
                     continue
-                ambito = s(row["ambito"]).upper() or "GLOBAL"
+                ambito = s(row["ambito"]) or "GLOBAL"
+                if ambito.upper() == "GLOBAL":
+                    ambito = "GLOBAL"
                 base = s(row["base_calculo"]).upper() or "MONTO_FIJO"
                 if base not in BASES_CALCULO:
                     rep["avisos"].append(f"Plantilla_Funcionamiento fila {row['_fila']}: base «{base}» no válida.")
                     continue
-                if ambito != "GLOBAL" and ambito not in areas:
-                    rep["avisos"].append(f"Plantilla_Funcionamiento fila {row['_fila']}: el área {ambito} no existe.")
-                    continue
-                data = {"unidad_id": None if ambito == "GLOBAL" else areas[ambito],
+                uid_amb = None
+                if ambito != "GLOBAL":
+                    uid_amb, err = self.buscar_unidad(ambito, todas_u)
+                    if not uid_amb:
+                        rep["avisos"].append(f"Plantilla_Funcionamiento fila {row['_fila']}: {err}.")
+                        continue
+                data = {"unidad_id": uid_amb,
                         "macrogrupo": s(row["macrogrupo"]) or "*", "solo_genera_ingresos": si(row["solo_genera_ingresos"]),
                         "tipo_flujo": "Ingresos" if s(row["tipo_flujo"]).startswith("Ingreso") else "Egresos",
                         "partida": s(row["partida"]), "base_calculo": base,

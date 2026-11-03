@@ -2137,7 +2137,7 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
         ("TL_Ejes", "Ejes (código)", [e["codigo"] for e in ejes]),
         ("TL_OE", "OE del PEI (código)", [o["codigo"] for o in oes]),
         ("TL_Bases", "Bases de cálculo", BASES_CALCULO),
-        ("TL_Ambito", "Ámbito", ["GLOBAL"] + [u["codigo_area"] for u in unidades]),
+        ("TL_Ambito", "Ámbito", ["GLOBAL"] + [ctrl.clave_unidad(u, unidades) for u in unidades]),
         ("TL_Cuentas", "Cuentas NIIF (ingresos y egresos)", cuentas),
         ("TL_Sust", "Sustentos", sust),
         ("TL_Cat", "Categorías presupuestales", categorias),
@@ -2260,7 +2260,7 @@ def export_plantilla_parametros(ctrl: POAController, path: str | Path) -> Path:
           {"concepto": 40, "unidad_medida": 24, "costo_unitario": 18, "fuente": 50}, {"costo_unitario": MONEY})
 
     # ----------------------------------------------- Plantilla de funcionamiento
-    areas = {u["id"]: u["codigo_area"] for u in unidades}
+    areas = {u["id"]: ctrl.clave_unidad(u, unidades) for u in unidades}
     rows = []
     for r in db.all("plantilla_funcionamiento", order="unidad_id IS NOT NULL, unidad_id, orden, id"):
         r = dict(r)

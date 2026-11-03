@@ -200,6 +200,48 @@ class FlujoCompletoTest(unittest.TestCase):
         self.assertEqual({r["Codigo_NIIF"] for r in bd}, {"6941010100"})
         self.assertEqual({r["Partida_GG"] for r in bd}, {"Material de oficina"})
 
+    def test_plantilla_unidades_y_techos(self):
+        import openpyxl
+        path = export_plantilla_parametros(self.c, Path(self.tmp.name) / "plantilla.xlsx")
+        wb = openpyxl.load_workbook(path)
+        ws = wb["Unidades_Techos"]
+        cab = {ws.cell(4, j).value: j for j in range(1, ws.max_column + 1)}
+        fila = {ws.cell(r, cab["Código de área"]).value: r for r in range(5, ws.max_row + 1) if ws.cell(r, 2).value}
+        tst = fila["TST"]
+        ws.cell(tst, cab["Techo funcionamiento (S/)"], 77777)
+        # fila con ID de OTRA instalación (apunta a la unidad OL de esta base) y código nuevo: debe crear otra unidad
+        ol = next(u for u in self.c.unidades() if u["codigo_area"] == "OL")
+        r = ws.max_row + 1
+        for k, v in (("ID", ol["id"]), ("Código de área", "601102"), ("Macrogrupo", "MARKETING"),
+                     ("Nombre de la unidad orgánica", "Lima Sur"), ("Centro de costo", "DIRECCION DE MARKETING"),
+                     ("Techo funcionamiento (S/)", 5000)):
+            ws.cell(r, cab[k], v)
+        # cambio real de código: misma unidad (mismo centro de costo) con código nuevo
+        ecc = next(u for u in self.c.unidades() if u["codigo_area"] == "ECC-PRE")
+        ws.cell(fila["ECC-PRE"], cab["Código de área"], "4011")
+        wb.save(path)
+        rep = self.c.import_plantilla_parametros(path)
+        self.assertIn("1 nuevas", rep["Unidades y techos"])
+        self.assertTrue(any("TST - UNIDAD DE PRUEBA: Techo funcionamiento (S/)" in x and "77,777.00" in x
+                            for x in rep["Cambios en unidades y techos"]))
+        por_area = {u["codigo_area"]: u for u in self.c.unidades()}
+        self.assertEqual(por_area["TST"]["techo_funcionamiento"], 77777)
+        self.assertEqual(por_area["OL"]["id"], ol["id"])  # OL no fue sobrescrita
+        self.assertEqual(por_area["601102"]["techo_funcionamiento"], 5000)
+        self.assertEqual(por_area["4011"]["id"], ecc["id"])  # ECC-PRE cambió de código
+        # sincronizar: eliminar las unidades que no están en el archivo y no tienen actividades
+        ws.delete_rows(fila["OL"])
+        wb.save(path)
+        rep = self.c.import_plantilla_parametros(path, eliminar_unidades_ausentes=True)
+        self.assertNotIn("OL", {u["codigo_area"] for u in self.c.unidades()})
+        self.assertEqual(rep["Unidades eliminadas (no estaban en el archivo)"], 1)
+        # sin la opción, una unidad ausente se conserva y se avisa
+        ws.delete_rows(fila["TST"] - (1 if fila["OL"] < fila["TST"] else 0))
+        wb.save(path)
+        rep = self.c.import_plantilla_parametros(path, eliminar_unidades_ausentes=True)
+        self.assertIn("TST", {u["codigo_area"] for u in self.c.unidades()})  # tiene actividades: se conserva
+        self.assertIn("TST", rep["avisos"][0])
+
     def test_plantilla_parametros_ida_y_vuelta(self):
         import openpyxl
         path = export_plantilla_parametros(self.c, Path(self.tmp.name) / "plantilla.xlsx")
@@ -245,8 +287,16 @@ class FlujoCompletoTest(unittest.TestCase):
         self.assertEqual(uid, self.uid)
         self.assertEqual(self.c.unidad(self.uid)["techo_iniciativas"], 777)
         otra = self.c.save_unidad({"codigo_area": "OTRA", "nombre_unidad": "OTRA UNIDAD"})
-        with self.assertRaises(ValueError):
-            self.c.save_unidad({"codigo_area": "TST", "nombre_unidad": "OTRA UNIDAD"}, otra)
+        with self.assertRaises(ValueError):  # mismo código y misma unidad orgánica (sede) que otra unidad
+            self.c.save_unidad({"codigo_area": "TST", "nombre_unidad": "UNIDAD DE PRUEBA"}, otra)
+        # el mismo código en otra sede es otra unidad
+        norte = self.c.save_unidad({"codigo_area": "TST", "nombre_unidad": "Lima Norte", "techo_iniciativas": 5})
+        self.assertNotEqual(norte, self.uid)
+        self.assertEqual(self.c.unidad(self.uid)["techo_iniciativas"], 777)
+        self.assertEqual(self.c.buscar_unidad("TST")[0], None)  # ambiguo: pide la sede
+        self.assertEqual(self.c.buscar_unidad("TST - Lima Norte")[0], norte)
+        self.assertEqual(self.c.clave_unidad(self.c.unidad(norte)), "TST - Lima Norte")
+        self.c.delete_unidad(norte)
         # Los techos y sub-techos viajan en el libro exportado y se recuperan al importarlo
         self.db.update("unidades_organicas", self.uid, {"techo_planilla_docente": 1234, "techo_marketing": 700})
         libro = OfficialWorkbookExporter(self.c, self.uid).export(Path(self.tmp.name) / "libro.xlsx")

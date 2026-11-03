@@ -27,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE = Path(__file__).resolve().parent.parent
-VERSION_APP = "2.6"
+VERSION_APP = "2.7"
 # Sufijo ?v= de CSS/JS: al actualizar el programa los navegadores descargan los archivos nuevos (no usan la caché).
 VERSION_ESTATICOS = str(int(max(f.stat().st_mtime for f in (Path(__file__).parent / "static").rglob("*") if f.is_file())))
 if str(BASE) not in sys.path:
@@ -425,7 +425,9 @@ def _importar_parametros_auto(path: Path) -> dict:
     hojas = set(wb.sheetnames)
     wb.close()
     if {"Datos_Generales", "Unidades_Techos"} & hojas:
-        return {"Archivo reconocido": "Plantilla de Parámetros y Catálogos", **ctrl().import_plantilla_parametros(path)}
+        eliminar = request.form.get("eliminar_ausentes") == "1"
+        return {"Archivo reconocido": "Plantilla de Parámetros y Catálogos",
+                **ctrl().import_plantilla_parametros(path, eliminar_unidades_ausentes=eliminar)}
     if "Parámetros" in hojas:
         return {"Archivo reconocido": "Parámetros de una Ficha Excel", **ctrl().import_parametros(path)}
     raise ValueError("El archivo no es la plantilla de Parámetros y Catálogos (hojas Datos_Generales, Unidades_Techos…) "
@@ -601,6 +603,7 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
         plano = lambda t: [{"value": x["codigo"], "label": x["codigo"]} for x in dbx.catalogo(t)]  # noqa: E731
         sust_egr, sust_ing = plano("SUSTENTO_EGR"), plano("SUSTENTO_ING")
         cuentas = lambda t: [{"value": p, "label": p} for p in c.partidas(t)]  # noqa: E731
+        todas_u = c.unidades()
         return jsonify(
             ejes=[{"value": e["codigo"], "label": f"{e['codigo']} · {e['descripcion']}"} for e in ejes],
             oes=cat("OE"), objs=objs, obj_oe=obj_oe, origenes=plano("ORIGEN"), prioridades=cat("PRIORIDAD"),
@@ -616,7 +619,7 @@ def _rutas(app: Flask) -> None:  # noqa: C901 — registro de rutas
             macrogrupos_plantilla=[{"value": "*", "label": "* (todos)"}] +
             [{"value": m, "label": m} for m in c.macrogrupos()],
             ambitos=[{"value": "GLOBAL", "label": "GLOBAL"}] +
-            [{"value": u["codigo_area"], "label": c.unidad_display(u)} for u in c.unidades()],
+            [{"value": c.clave_unidad(u, todas_u), "label": c.unidad_display(u)} for u in todas_u],
             unidades=[{"value": u["id"], "label": c.unidad_display(u)}
                       for u in sorted(c.unidades(), key=lambda x: s(x["codigo_area"]))],
             tipos_detalle={"INI": ["Egresos", "Ingresos"], "OO": ["Egresos", "Ingresos"],
@@ -1204,7 +1207,8 @@ def _admin_rows(entidad: str) -> list[dict]:
             r["_uso"] = uso.get(r["codigo"], 0)
         return rows
     if entidad == "plantilla":
-        areas = {u["id"]: u["codigo_area"] for u in c.unidades()}
+        todas_u = c.unidades()
+        areas = {u["id"]: c.clave_unidad(u, todas_u) for u in todas_u}
         rows = db().all("plantilla_funcionamiento", order="unidad_id IS NOT NULL, unidad_id, orden, id")
         for r in rows:
             r["ambito"] = areas.get(r["unidad_id"], "GLOBAL")
@@ -1213,8 +1217,11 @@ def _admin_rows(entidad: str) -> list[dict]:
         rows = db().query("SELECT id, usuario, nombre, correo, rol, activo, debe_cambiar_clave, ultimo_acceso "
                           "FROM usuarios ORDER BY usuario")
         asign = {}
+        todas_u = c.unidades()
+        claves = {u["id"]: c.clave_unidad(u, todas_u) for u in todas_u}
         for r in db().query("SELECT uu.usuario_id, u.id, u.codigo_area FROM usuario_unidades uu JOIN "
                             "unidades_organicas u ON u.id = uu.unidad_id ORDER BY u.codigo_area"):
+            r["codigo_area"] = claves.get(r["id"], r["codigo_area"])
             asign.setdefault(r["usuario_id"], []).append(r)
         for r in rows:
             r["unidades"] = [x["id"] for x in asign.get(r["id"], [])]
@@ -1256,10 +1263,9 @@ def _admin_save(entidad: str, d: dict, rid: Optional[int]) -> int:
         amb = s(d.pop("ambito", "GLOBAL")) or "GLOBAL"
         uid = None
         if amb != "GLOBAL":
-            r = db().query_one("SELECT id FROM unidades_organicas WHERE codigo_area=?", (amb,))
-            if not r:
-                raise ValueError(f"El área {amb} no existe.")
-            uid = r["id"]
+            uid, err = c.buscar_unidad(amb)
+            if not uid:
+                raise ValueError(f"Ámbito no válido: {err}.")
         d.update(unidad_id=uid, porcentaje=to_float(d.get("porcentaje"), 1.0), monto_fijo=to_float(d.get("monto_fijo"), 0.0),
                  orden=int(to_float(d.get("orden"), 0) or 0),
                  activo=1 if d.get("activo") in (1, True, "1", "on") else 0,
@@ -1321,7 +1327,7 @@ def _guardar_usuario(d: dict, rid: Optional[int]) -> int:
 # ----------------------------------------------------------- carga masiva de usuarios
 COLS_USUARIOS = [("usuario", "Usuario", 22), ("nombre", "Nombre completo", 34), ("correo", "Correo", 32),
                  ("rol", "Rol (RESPONSABLE / CONSULTA / ADMIN)", 22),
-                 ("unidades", "Códigos de área asignados (separados por coma)", 40),
+                 ("unidades", "Unidades asignadas: clave de la hoja «Unidades», separadas por coma", 46),
                  ("clave", "Clave temporal (opcional)", 22), ("activo", "Activo (Sí/No)", 12)]
 
 
@@ -1344,7 +1350,9 @@ def _plantilla_usuarios(path: Path) -> None:
                  ["1. Complete la hoja «Usuarios»: una fila por persona. Las filas existentes se actualizan por su usuario."],
                  ["2. Usuario: letras, números, punto, guion o @ (por ejemplo ana.alva). Los espacios se cambian por puntos."],
                  ["3. Rol: RESPONSABLE (formula sus unidades), CONSULTA (solo lectura) o ADMIN (DPDI)."],
-                 ["4. Códigos de área: los de la hoja «Unidades», separados por coma. Obligatorio para RESPONSABLE."],
+                 ["4. Unidades asignadas: la «Clave» de la hoja «Unidades», separadas por coma. Es el código de área, o"
+                  " «código - sede» cuando el mismo código existe en varias sedes (p. ej. 10110101 - Lima Norte)."
+                  " Obligatorio para RESPONSABLE."],
                  ["5. Clave temporal: si la deja vacía en un usuario nuevo, el sistema genera una. En usuarios existentes,"
                   " vacía = no cambiar la clave. Todos deben cambiarla en su primer ingreso."],
                  ["6. La hoja «Sugeridos» propone usuarios a partir del responsable y correo de cada unidad: copie a"
@@ -1376,10 +1384,12 @@ def _plantilla_usuarios(path: Path) -> None:
         dv_act.add("G2:G2000")
         return ws
 
+    todas_u = c.unidades()
+    claves = {u["id"]: c.clave_unidad(u, todas_u) for u in todas_u}
     asign: dict[int, list[str]] = {}
-    for r in db().query("SELECT uu.usuario_id, u.codigo_area FROM usuario_unidades uu "
-                        "JOIN unidades_organicas u ON u.id = uu.unidad_id ORDER BY u.codigo_area"):
-        asign.setdefault(r["usuario_id"], []).append(r["codigo_area"])
+    for r in db().query("SELECT uu.usuario_id, uu.unidad_id FROM usuario_unidades uu "
+                        "JOIN unidades_organicas u ON u.id = uu.unidad_id ORDER BY u.codigo_area, u.nombre_unidad"):
+        asign.setdefault(r["usuario_id"], []).append(claves.get(r["unidad_id"], ""))
     existentes = db().query("SELECT * FROM usuarios ORDER BY usuario")
     hoja("Usuarios", [[u["usuario"], u["nombre"], u["correo"], u["rol"], ", ".join(asign.get(u["id"], [])), "",
                        "Sí" if u["activo"] else "No"] for u in existentes])
@@ -1393,19 +1403,21 @@ def _plantilla_usuarios(path: Path) -> None:
         if usuario_s in ya:
             continue
         fila = sugeridos.setdefault(usuario_s, [usuario_s, s(un.get("responsable")), correo, "RESPONSABLE", [], "", "Sí"])
-        fila[4].append(un["codigo_area"])
+        fila[4].append(claves[un["id"]])
     ws_s = hoja("Sugeridos", [f[:4] + [", ".join(f[4])] + f[5:] for f in sugeridos.values()])
     if not sugeridos:
         ws_s["A2"] = ("Sin sugerencias: registre «Responsable» y «Correo electrónico» de cada unidad (Unidades y techos o "
                       "plantilla de parámetros) para que el sistema proponga los usuarios.")
         ws_s["A2"].font = Font(italic=True, color="6B6B6B")
     wu = wb.create_sheet("Unidades")
-    wu.append(["Código de área", "Unidad (código - centro de costo - unidad orgánica)", "Macrogrupo"])
-    for i in (1, 2, 3):
+    wu.append(["Clave (use esta en «Usuarios»)", "Código de área", "Unidad orgánica (sede)",
+               "Unidad (código - centro de costo - unidad orgánica)", "Macrogrupo"])
+    for i in range(1, 6):
         wu.cell(1, i).fill, wu.cell(1, i).font = cab_fill, cab_font
-    for un in c.unidades():
-        wu.append([un["codigo_area"], c.unidad_display(un), un.get("macrogrupo")])
-    wu.column_dimensions["A"].width, wu.column_dimensions["B"].width, wu.column_dimensions["C"].width = 16, 90, 34
+    for un in todas_u:
+        wu.append([claves[un["id"]], un["codigo_area"], un["nombre_unidad"], c.unidad_display(un), un.get("macrogrupo")])
+    for letra, ancho in zip("ABCDE", (30, 16, 22, 90, 34)):
+        wu.column_dimensions[letra].width = ancho
     wb.active = 1
     wb.save(path)
 
@@ -1417,7 +1429,7 @@ def _importar_usuarios(path: Path) -> dict:
         raise ValueError("El archivo no contiene la hoja «Usuarios». Descargue la plantilla de usuarios del sistema.")
     filas = list(wb["Usuarios"].iter_rows(values_only=True))
     wb.close()
-    codigos = {s(u["codigo_area"]).upper(): u["id"] for u in ctrl().unidades()}
+    todas_u = ctrl().unidades()
     rep: dict[str, Any] = {"Usuarios creados": 0, "Usuarios actualizados": 0, "avisos": [], "credenciales": []}
     for n, fila in enumerate(filas[1:], start=2):
         fila = list(fila) + [None] * (len(COLS_USUARIOS) - len(fila))
@@ -1427,11 +1439,12 @@ def _importar_usuarios(path: Path) -> dict:
         nombre_u = normalizar_usuario(d["usuario"])
         uids, faltan = [], []
         for cod in re.split(r"[,;\n]+", _codigo_texto(d["unidades"])):
-            cod = cod.strip().upper()
-            if cod:
-                (uids.append(codigos[cod]) if cod in codigos else faltan.append(cod))
+            if not cod.strip():
+                continue
+            uid_u, err = ctrl().buscar_unidad(cod, todas_u)
+            (uids.append(uid_u) if uid_u else faltan.append(err))
         if faltan:
-            rep["avisos"].append(f"Fila {n} ({nombre_u}): códigos de área inexistentes: {', '.join(faltan)}.")
+            rep["avisos"].append(f"Fila {n} ({nombre_u}): " + "; ".join(faltan) + ".")
         rol = s(d["rol"]).upper() or "RESPONSABLE"
         if rol not in ROLES:
             rep["avisos"].append(f"Fila {n} ({nombre_u}): rol «{d['rol']}» no válido; se omitió la fila.")
