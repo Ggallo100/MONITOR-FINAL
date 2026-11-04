@@ -218,12 +218,26 @@
 <p>Para crear muchos usuarios a la vez use la tarjeta <b>Carga masiva de usuarios</b> de la misma página:</p>
 <ol class="pasos">
   <li><b>Descargar plantilla de usuarios (.xlsx)</b>. Contiene las hojas <code>Usuarios</code> (los actuales), <code>Sugeridos</code> (propuestas a partir
-    del responsable y correo registrados en cada unidad), <code>Unidades</code> (códigos de área) e <code>Instrucciones</code>.</li>
-  <li>Complete la hoja <code>Usuarios</code>: usuario, nombre, correo, rol, <b>códigos de área separados por coma</b>, clave temporal (opcional) y activo.</li>
+    del responsable y correo registrados en cada unidad), <code>Unidades</code> (código de área, centro de costo y sede), <code>Sedes</code> e <code>Instrucciones</code>.</li>
+  <li>Complete la hoja <code>Usuarios</code>: usuario, nombre, correo, rol, <b>Sede</b>, <b>centros de costo</b> (códigos de área separados por coma),
+    clave temporal (opcional) y activo. El usuario recibe acceso a esos centros de costo <b>en la sede indicada</b>.</li>
   <li>Pulse <b>Importar usuarios</b>. El sistema crea los nuevos, actualiza los existentes y muestra los avisos (rol no válido, códigos inexistentes,
     responsables sin unidades).</li>
   <li>Descargue la lista de <b>claves temporales</b> (.csv) desde la ventana de resultado: no se vuelve a mostrar.</li>
 </ol>
+<table class="libre">
+  <tr><th>Sede</th><th>Centros de costo</th><th>Acceso que recibe</th></tr>
+  <tr><td>Lima Norte</td><td>10110101, 10110102</td><td>Esos dos centros de costo de Lima Norte.</td></tr>
+  <tr><td>Lima Norte, Lima Sur</td><td>10110101</td><td>El centro 10110101 en ambas sedes.</td></tr>
+  <tr><td>TODAS</td><td>10110101</td><td>El centro 10110101 en todas las sedes donde existe.</td></tr>
+  <tr><td>(vacía)</td><td>10110101 - Lima Norte, 201702 - Lima Sur</td><td>Centros de distintas sedes, indicados uno por uno como «código - sede».</td></tr>
+  <tr><td>(vacía)</td><td>101109</td><td>Válido solo si ese código existe en una sola sede; si existe en varias, el sistema avisa que falta la sede.</td></tr>
+</table>
+<p>Las hojas <code>Sedes</code> y <code>Unidades</code> de la plantilla listan las sedes y los centros de costo disponibles (código, centro de costo y sede).
+  También puede escribir el nombre del centro de costo en lugar del código. Si un centro no existe en la sede indicada, o la sede no existe, el
+  resultado de la importación lo informa y esa asignación no se hace. En <b>Usuarios y accesos</b> la tabla muestra las columnas
+  <b>Sede(s)</b> y <b>Centros de costo</b> de cada usuario; en el formulario, escriba la sede o el código en el buscador de unidades para filtrarlas.</p>
+
 <h2>Tareas frecuentes</h2>
 <table class="libre">
   <tr><th>Tarea</th><th>Cómo hacerlo</th></tr>

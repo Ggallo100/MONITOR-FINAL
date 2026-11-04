@@ -211,14 +211,14 @@ class WebTest(unittest.TestCase):
         import openpyxl
         plantilla = self.admin.get("/descargas/plantilla-usuarios").data
         wb = openpyxl.load_workbook(io.BytesIO(plantilla))
-        self.assertEqual(wb.sheetnames, ["Instrucciones", "Usuarios", "Sugeridos", "Unidades"])
+        self.assertEqual(wb.sheetnames, ["Instrucciones", "Usuarios", "Sugeridos", "Unidades", "Sedes"])
         ws = wb["Usuarios"]
         self.assertEqual(ws.cell(2, 1).value, "admin")
         codigos = [r[0] for r in wb["Unidades"].iter_rows(min_row=2, values_only=True)]
-        ws.append(["carla.diaz", "Carla Díaz", "carla@uni.pe", "RESPONSABLE", f"{codigos[0]}, {codigos[1]}", "", "Sí"])
-        ws.append(["Luis Soto", "Luis Soto", "", "CONSULTA", "", "Consulta2027", "Sí"])
-        ws.append(["mal.rol", "X", "", "JEFE", "", "", "Sí"])
-        ws.append(["eva.paz", "Eva", "", "RESPONSABLE", "NOEXISTE", "", "Sí"])
+        ws.append(["carla.diaz", "Carla Díaz", "carla@uni.pe", "RESPONSABLE", "", f"{codigos[0]}, {codigos[1]}", "", "Sí"])
+        ws.append(["Luis Soto", "Luis Soto", "", "CONSULTA", "", "", "Consulta2027", "Sí"])
+        ws.append(["mal.rol", "X", "", "JEFE", "", "", "", "Sí"])
+        ws.append(["eva.paz", "Eva", "", "RESPONSABLE", "", "NOEXISTE", "", "Sí"])
         buf = io.BytesIO()
         wb.save(buf)
         rep = self.api(self.admin, "POST", "/cargas/usuarios", data={"archivo": (io.BytesIO(buf.getvalue()), "u.xlsx")},
@@ -401,12 +401,24 @@ class WebTest(unittest.TestCase):
         self.assertIn("2 actualizadas", rep["Unidades y techos"])
         filas = {u["id"]: u for u in self.api(self.admin, "GET", "/api/admin/t/unidades")["rows"]}
         self.assertEqual((filas[sur]["techo_funcionamiento"], filas[norte]["techo_funcionamiento"]), (3000, 4000))
-        # carga masiva de usuarios: la clave «código - sede» resuelve la unidad; el código solo es ambiguo
+        # carga masiva de usuarios con columna Sede: el código se asigna en la sede indicada
+        otro = self.api(self.admin, "POST", "/api/admin/t/unidades",
+                        {"codigo_area": "201702", "nombre_unidad": "Lima Sur", "centro_costo": "CENTRO DE IDIOMAS"})["id"]
         wb = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/plantilla-usuarios").data))
-        claves = [r[0] for r in wb["Unidades"].iter_rows(min_row=2, values_only=True)]
-        self.assertIn("10110101 - Lima Norte", claves)
-        wb["Usuarios"].append(["juan.norte", "Juan", "", "RESPONSABLE", "10110101 - Lima Norte", "", "Sí"])
-        wb["Usuarios"].append(["juan.duda", "Juan", "", "RESPONSABLE", "10110101", "", "Sí"])
+        self.assertEqual([c.value for c in wb["Usuarios"][1]][4], "Sede (Lima Norte, Lima Sur… o TODAS)")
+        self.assertIn("Lima Norte", [r[0] for r in wb["Sedes"].iter_rows(min_row=2, values_only=True)])
+        filas_u = [
+            ["juan.norte", "Juan", "", "RESPONSABLE", "Lima Norte", "10110101", "", "Sí"],
+            ["juan.duda", "Juan", "", "RESPONSABLE", "", "10110101", "", "Sí"],               # ambiguo: falta la sede
+            ["ana.sur", "Ana", "", "RESPONSABLE", "Lima Sur", "10110101, 201702", "", "Sí"],
+            ["luz.todas", "Luz", "", "RESPONSABLE", "TODAS", "10110101", "", "Sí"],
+            ["leo.mixto", "Leo", "", "RESPONSABLE", "", "10110101 - Lima Norte, 201702 - Lima Sur", "", "Sí"],
+            ["max.error", "Max", "", "RESPONSABLE", "Lima Norte", "201702", "", "Sí"],          # no existe en esa sede
+            ["sol.sede", "Sol", "", "RESPONSABLE", "Arequipa", "201702", "", "Sí"],             # sede inexistente
+            ["eli.nombre", "Eli", "", "RESPONSABLE", "Lima Sur", "Centro de Idiomas", "", "Sí"],  # por nombre del centro
+        ]
+        for f in filas_u:
+            wb["Usuarios"].append(f)
         buf = io.BytesIO()
         wb.save(buf)
         rep = self.api(self.admin, "POST", "/cargas/usuarios", data={"archivo": (io.BytesIO(buf.getvalue()), "u.xlsx")},
@@ -414,7 +426,36 @@ class WebTest(unittest.TestCase):
         usuarios = {u["usuario"]: u for u in self.api(self.admin, "GET", "/api/admin/t/usuarios")["rows"]}
         self.assertEqual(usuarios["juan.norte"]["unidades"], [norte])
         self.assertEqual(usuarios["juan.norte"]["_unidades"], "10110101 - Lima Norte")
-        self.assertTrue(any("indique la sede" in a for a in rep["avisos"]))
+        self.assertEqual(usuarios["juan.norte"]["_sedes"], "Lima Norte")
+        self.assertEqual(sorted(usuarios["ana.sur"]["unidades"]), sorted([sur, otro]))
+        self.assertEqual(sorted(usuarios["luz.todas"]["unidades"]), sorted([sur, norte]))
+        self.assertEqual(sorted(usuarios["leo.mixto"]["unidades"]), sorted([norte, otro]))
+        self.assertEqual(usuarios["eli.nombre"]["unidades"], [otro])
+        self.assertEqual(usuarios["max.error"]["unidades"], [])
+        avisos = " | ".join(rep["avisos"])
+        self.assertIn("«10110101» existe en varias sedes", avisos)
+        self.assertIn("«201702» no existe en la sede Lima Norte", avisos)
+        self.assertIn("la sede «Arequipa» no existe", avisos)
+        # ida y vuelta: la plantilla exporta Sede + códigos, o «código - sede» si el usuario mezcla sedes
+        wb = openpyxl.load_workbook(io.BytesIO(self.admin.get("/descargas/plantilla-usuarios").data))
+        exp = {r[0]: r for r in wb["Usuarios"].iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(exp["juan.norte"][4:6], ("Lima Norte", "10110101"))
+        self.assertEqual(exp["ana.sur"][4:6], ("Lima Sur", "10110101, 201702"))
+        self.assertEqual(exp["luz.todas"][4:6], ("Lima Norte, Lima Sur", "10110101"))
+        self.assertEqual(exp["leo.mixto"][4], None)
+        # una plantilla anterior (sin columna Sede) sigue importándose
+        viejo = openpyxl.Workbook()
+        hoja = viejo.active
+        hoja.title = "Usuarios"
+        hoja.append(["Usuario", "Nombre completo", "Correo", "Rol (RESPONSABLE / CONSULTA / ADMIN)",
+                     "Códigos de área asignados (separados por coma)", "Clave temporal (opcional)", "Activo (Sí/No)"])
+        hoja.append(["ivan.viejo", "Iván", "", "RESPONSABLE", "201702", "", "Sí"])
+        buf = io.BytesIO()
+        viejo.save(buf)
+        self.api(self.admin, "POST", "/cargas/usuarios", data={"archivo": (io.BytesIO(buf.getvalue()), "v.xlsx")},
+                 content_type="multipart/form-data")
+        usuarios = {u["usuario"]: u for u in self.api(self.admin, "GET", "/api/admin/t/usuarios")["rows"]}
+        self.assertEqual(usuarios["ivan.viejo"]["unidades"], [otro])
 
     def test_identidad_grafica(self):
         self.api(self.admin, "PUT", "/api/admin/parametros", {"tema_primario": "#123456", "tema_acento": "#ABCDEF"})
